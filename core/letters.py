@@ -15,7 +15,7 @@ Si j'ai consenti au traitement de mes données, je retire ce consentement. Je m'
 Si vous avez communiqué ces données à des tiers, vous devez leur transmettre ma demande d'effacement, conformément à l'article 19 du RGPD. Merci de m'indiquer qui sont ces destinataires.
 
 Ma demande vise {scope}tous les services et sociétés dont vous êtes responsable du traitement au sens de l'article 4, point 7, du RGPD.
-
+{pages}
 Conformément à l'article 12, paragraphe 3, du RGPD, vous devez me confirmer l'effacement dans les meilleurs délais et au plus tard un mois après réception de cette demande. Si vous refusez d'y donner suite, vous devez m'en donner les raisons.
 
 Informations permettant de m'identifier :
@@ -27,6 +27,7 @@ Cordialement,
 {name}
 """,
         "scope": "explicitement {runs}, ainsi que ",
+        "pages": "Elle vise en particulier les contenus publiés aux adresses suivantes, que je vous demande de supprimer :",
     },
     "en": {
         "subject": "Request for erasure of my personal data (Article 17 GDPR)",
@@ -39,7 +40,7 @@ If I have given consent to the processing of my personal data, I hereby withdraw
 If you have disclosed these data to third parties, you must communicate my erasure request to each recipient, as laid down in Article 19 GDPR. Please inform me about those recipients.
 
 My request covers {scope}all services and companies for which you are the controller as defined by Article 4(7) GDPR.
-
+{pages}
 As laid down in Article 12(3) GDPR, you must confirm the erasure without undue delay and in any event within one month of receipt of this request. If you refuse to act on it, you must give me your reasons.
 
 Information to identify me:
@@ -51,6 +52,7 @@ Yours faithfully,
 {name}
 """,
         "scope": "explicitly {runs}, as well as ",
+        "pages": "It concerns in particular the content published at the following addresses, which I ask you to remove:",
     },
 }
 
@@ -149,14 +151,54 @@ def identity_block(profile, company, lang):
     return "\n".join(lines)
 
 
-def erasure(profile, company, lang=None):
+def erasure(profile, company, lang=None, urls=None):
+    """urls : pages précises à faire supprimer (module Empreinte), citées dans le courrier."""
     lang = lang or language_for(company)
     t = ERASURE[lang]
     runs = [r for r in company.get("runs") or [] if r][:15]
     scope = t["scope"].format(runs=", ".join(runs)) if runs else ""
-    body = t["body"].format(scope=scope, identity=identity_block(profile, company, lang),
+    pages = ""
+    if urls:
+        pages = "\n" + t["pages"] + "\n" + "\n".join("- " + u for u in urls) + "\n"
+    body = t["body"].format(scope=scope, pages=pages, identity=identity_block(profile, company, lang),
                             name=profile.get("name", ""))
     return lang, t["subject"], body
+
+
+DELISTING = """Je demande le déréférencement des pages ci-dessous : qu'elles n'apparaissent plus dans les résultats d'une recherche portant sur mon nom, « {name} ». Cette demande s'appuie sur l'article 17 du RGPD et sur l'arrêt de la Cour de justice de l'Union européenne du 13 mai 2014 (Google Spain, C-131/12).
+
+Pages concernées :
+{pages}
+
+Motif : ces pages contiennent des données personnelles me concernant ({data}). Je ne suis pas une personne publique, ces informations ne présentent pas d'intérêt pour le public et leur diffusion porte atteinte à ma vie privée.
+
+{name}
+"""
+
+DELISTING_COMPLAINT = """Plainte à déposer sur https://www.cnil.fr/fr/plaintes (rubrique « Internet », déréférencement)
+
+Je dépose une plainte conformément à l'article 77 du RGPD contre le moteur de recherche auquel j'ai adressé, le {sent}, une demande de déréférencement restée sans réponse satisfaisante.
+
+Recherche concernée : mon nom, « {name} ».
+Page dont je demande le déréférencement :
+{page}
+
+Motif de ma demande : cette page contient des données personnelles me concernant. Je ne suis pas une personne publique et sa diffusion porte atteinte à ma vie privée.
+
+Je vous demande d'intervenir auprès du moteur de recherche pour qu'il donne suite à ma demande. Vous pouvez me joindre à l'adresse {email}.
+
+{name}
+"""
+
+
+def delisting(profile, urls):
+    data = "nom" + (", adresse e-mail" if profile.get("email") else "") + (", téléphone" if profile.get("phone") else "")
+    return DELISTING.format(name=profile.get("name", ""), pages="\n".join("- " + u for u in urls), data=data)
+
+
+def delisting_complaint(profile, url, sent_at):
+    return DELISTING_COMPLAINT.format(name=profile.get("name", ""), page=url, sent=fr_date(sent_at),
+                                      email=profile.get("email", ""))
 
 
 def reminder(profile, request):

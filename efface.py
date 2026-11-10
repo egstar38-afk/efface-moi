@@ -17,7 +17,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from core import companies, contact, discover, engine, mailer, store, task
+from core import companies, contact, discover, engine, footprint, mailer, store, task
 
 TOKEN = secrets.token_urlsafe(24)
 WEB = store.ROOT / "web" / "index.html"
@@ -43,7 +43,8 @@ def state():
         "requests": reqs, "stats": stats, "automation": engine.automation(), "jobs": jobs,
         "sent_today": engine.sent_today(), "last_cycle": store.get("last_cycle"),
         "last_check": store.get("last_check"), "mail_scan": store.get("mail_scan"),
-        "username_scan": store.get("username_scan"),
+        "username_scan": footprint.enrich_accounts(store.get("username_scan")),
+        "footprint": footprint.state(),
         "custom": [companies.summary(c) for c in store.get("custom_companies", [])],
         "shareable": engine.shareable(),
         "app": {"version": store.VERSION, "exe": store.FROZEN, "server": SERVER_MODE, "windows": sys.platform == "win32",
@@ -99,6 +100,18 @@ def quit_app(b):
     threading.Timer(0.3, SERVER.shutdown).start()
 
 
+def update_bases(progress):
+    """Base des entreprises, adresses partagées, et liste des liens de suppression de compte."""
+    count = companies.update(progress)
+    footprint.ensure_jdm(0)
+    return {"count": count}
+
+
+def need_search():
+    if not footprint.provider_ready():
+        raise ValueError("Choisissez d'abord un moteur de recherche (SearXNG ou Brave) et enregistrez.")
+
+
 def need_imap():
     if not mailer.ready(for_imap=True):
         raise ValueError("Configurez d'abord votre messagerie (adresse, mot de passe d'application) dans Réglages.")
@@ -109,7 +122,7 @@ POST = {
     "/api/mail": lambda b: save_mail(b),
     "/api/mail/test": lambda b: mailer.test_connection(),
     "/api/automation": lambda b: save_automation(b),
-    "/api/companies/update": lambda b: job("update", lambda p: {"count": companies.update(p)}),
+    "/api/companies/update": lambda b: job("update", update_bases),
     "/api/companies/custom": lambda b: {"slug": companies.add_custom(
         b.get("name", ""), b.get("email", ""), b.get("web", ""), b.get("webform", ""), b.get("address", ""))},
     "/api/companies/custom/delete": lambda b: companies.remove_custom(b.get("slug", "")),
@@ -122,7 +135,18 @@ POST = {
     "/api/cycle": lambda b: job("cycle", engine.run_cycle),
     "/api/scan/mail": lambda b: (need_imap(), job("mailscan", lambda p: discover.scan_mailbox(
         max(100, min(int(b.get("limit", 3000)), 20000)), p)))[1],
-    "/api/scan/username": lambda b: job("userscan", lambda p: discover.scan_username(str(b.get("username", "")), p)),
+    "/api/scan/username": lambda b: job("userscan", lambda p: (footprint.ensure_jdm(), discover.scan_username(
+        str(b.get("username", "")), p))[1]),
+    "/api/footprint/settings": lambda b: footprint.save_settings(b) and None,
+    "/api/footprint/test": lambda b: footprint.test_provider(),
+    "/api/footprint/scan": lambda b: (footprint.guard(), need_search(), job("footprint", footprint.scan))[2],
+    "/api/footprint/recheck": lambda b: job("recheck", footprint.recheck),
+    "/api/footprint/add": lambda b: {"id": footprint.add_manual(str(b.get("url", ""))[:1200])},
+    "/api/footprint/action": lambda b: footprint.act(int(b["id"]), str(b.get("action", ""))),
+    "/api/footprint/request": lambda b: footprint.request_removal(int(b["id"]), str(b.get("email", ""))[:200],
+                                                                   str(b.get("name", ""))[:120]),
+    "/api/footprint/delete": lambda b: footprint.delete([int(i) for i in b.get("ids", [])]),
+    "/api/checklist": lambda b: footprint.check(str(b.get("id", "")), bool(b.get("done"))),
     "/api/task/enable": lambda b: (task.enable(), task.full_status())[1],
     "/api/task/disable": lambda b: (task.disable(), task.full_status())[1],
     "/api/startup/enable": lambda b: (task.startup_enable(), task.full_status())[1],
@@ -178,6 +202,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, companies.search(q.get("q", ""), q.get("preset", "")))
             if url.path == "/api/request":
                 return self._send(200, engine.detail(int(q.get("id", 0))))
+            if url.path == "/api/footprint/delisting":
+                return self._send(200, footprint.delisting_info(int(q.get("id", 0))))
             if url.path == "/api/task":
                 return self._send(200, task.full_status())
         except ValueError as e:

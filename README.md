@@ -21,6 +21,9 @@ Elle tourne sur votre ordinateur, envoie depuis votre propre boîte mail, et ne 
 | Trouver qui a vos données, d'après les expéditeurs de votre boîte mail | Oui |
 | Chercher l'adresse du délégué à la protection des données sur le site d'une entreprise | Oui, quand le site se laisse lire |
 | Recevoir les adresses trouvées par les autres utilisateurs, et partager les vôtres | Oui, après relecture |
+| Chercher les pages du web qui affichent votre nom, e-mail, téléphone ou pseudo | Oui, avec un moteur (voir « Empreinte publique ») |
+| Demander au site la suppression d'une page précise, et suivre si elle disparaît | Oui |
+| Demander le déréférencement à Google et à Bing | Non, le texte du formulaire est prêt à copier |
 | Lire une réponse et dire si la suppression est confirmée | Non, c'est vous |
 | Remplir un formulaire en ligne ou poster un courrier (entreprises sans e-mail) | Non, le texte est prêt à copier |
 | Déposer la plainte sur cnil.fr | Non, le texte est prêt à copier |
@@ -88,6 +91,33 @@ pouvoir se connecter au serveur en SSH avec une clé. À la main :
 puis <http://127.0.0.1:8766/>. Sur un serveur Linux, le mot de passe d'application est enregistré dans le
 dossier `data/`, réservé à votre compte mais non chiffré : n'installez Efface-moi que sur un serveur à vous.
 
+## Empreinte publique
+
+L'onglet **Empreinte** s'occupe de ce qui est visible sur le web à votre sujet.
+
+- **Trouver.** Sans rien régler, l'application prépare les recherches utiles (nom, e-mails, téléphone, pseudos,
+  réseaux sociaux, annuaires) à ouvrir dans votre navigateur ; vous collez ensuite l'adresse des pages qui vous
+  concernent. Avec un moteur de recherche, elle cherche toute seule, lit chaque page trouvée et ne garde que
+  celles où vos données figurent vraiment, puis recommence chaque semaine.
+- **Traiter.** Pour chaque page : demander la suppression au site (le courrier cite la page, l'application cherche
+  l'adresse de contact), demander le déréférencement à Google et à Bing (texte du formulaire prêt, délai d'un
+  mois suivi, plainte CNIL prête ensuite), supprimer votre compte (lien direct quand il est connu, grâce à la
+  base libre [JustDeleteMe](https://justdeleteme.xyz)), ou écarter la page.
+- **Suivre.** L'application vérifie si les pages en attente ont disparu.
+- **Liste guidée.** Annuaires, registres d'entreprises et outils officiels, avec la démarche pour chacun.
+
+La recherche automatique ne porte que sur vous : elle refuse de tourner si l'e-mail de votre identité n'est pas
+celui de la messagerie connectée. Elle ne fouille pas les réseaux sociaux par nom (ils l'interdisent et le
+bloquent) et ne fait pas de recherche par photo.
+
+### Choisir un moteur
+
+- **SearXNG**, un moteur libre à installer sur un serveur. Le dossier [`serveur/searxng`](serveur/searxng)
+  contient de quoi le lancer avec Docker en deux commandes ; il n'écoute que sur la machine elle-même. Dans
+  l'application : Empreinte → Recherche automatique → SearXNG → `http://127.0.0.1:8892`.
+- **Brave Search**, sans rien installer : créez une clé sur <https://api.search.brave.com> et collez-la dans
+  l'application. Vérifiez sur leur site ce que l'offre gratuite permet.
+
 ## Partager une adresse qui a marché
 
 La base est pauvre en entreprises françaises : chaque adresse trouvée par un utilisateur peut servir aux autres.
@@ -115,6 +145,8 @@ toute seule), ou fermez la proposition pour refuser.
 - La recherche d'adresse sur le site d'une entreprise échoue sur les grands sites qui bloquent les robots, et
   peut proposer une mauvaise adresse : vérifiez toujours la page d'origine.
 - La recherche de pseudo ne peut pas vérifier tous les sites.
+- La recherche automatique dépend de ce que les moteurs veulent bien montrer : une page peut exister sans être
+  trouvée, et un homonyme peut être signalé à tort. C'est vous qui triez.
 - Efface-moi ne lit pas le contenu des réponses : c'est vous qui dites si la suppression est confirmée.
 
 ## Vos données
@@ -122,8 +154,9 @@ toute seule), ou fermez la proposition pour refuser.
 - Profil, demandes et historique sont dans un dossier local : `data/` à côté du code, ou
   `%LOCALAPPDATA%\EffaceMoi` pour la version .exe. L'onglet Réglages affiche son emplacement.
 - Sous Windows, le mot de passe d'application est chiffré par Windows (DPAPI) pour votre seul compte.
-- L'application ne contacte que : votre messagerie, GitHub (base des entreprises, adresses partagées et liste
-  des sites pour la recherche de pseudo), les sites que vous lui demandez de vérifier, et les entreprises à qui vous écrivez.
+- L'application ne contacte que : votre messagerie, GitHub (base des entreprises, adresses partagées, liste
+  des sites pour la recherche de pseudo, liens de suppression de compte), le moteur de recherche que vous avez
+  choisi, les sites que vous lui demandez de vérifier, et les entreprises à qui vous écrivez.
 - L'interface n'est accessible que depuis la machine où elle tourne.
 
 ## Développer
@@ -131,6 +164,7 @@ toute seule), ou fermez la proposition pour refuser.
     python tests/test_flow.py       # cycle complet avec un faux serveur de messagerie
     python tests/test_contact.py    # recherche d'adresse sur un faux site
     python tests/test_commu.py      # partage d'adresses entre utilisateurs
+    python tests/test_empreinte.py  # empreinte publique, avec un faux moteur de recherche
 
 Les tests n'envoient aucun e-mail et n'accèdent pas à Internet. `construire-exe.bat` fabrique
 `dist\EffaceMoi.exe` avec PyInstaller. `outils/icone.py` redessine l'icône (il lui faut Pillow). Pousser une étiquette `v1.2.3` fait fabriquer et publier l'exe par
@@ -142,6 +176,7 @@ GitHub Actions.
     core/engine.py      cycle de vie des demandes
     core/discover.py    analyse de la boîte mail, recherche de pseudo
     core/contact.py     recherche d'adresse sur le site d'une entreprise
+    core/footprint.py   empreinte publique : recherche, pages trouvées, suppression, déréférencement
     core/task.py        tâche planifiée et lancement au démarrage (Windows)
     outils/adresse.py   vérification et acceptation des adresses proposées (GitHub Actions)
     communaute/         adresses partagées par les utilisateurs

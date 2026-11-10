@@ -76,9 +76,9 @@ code{font:13px ui-monospace,Consolas,monospace;background:var(--bg);padding:1px 
 
 <script>
 const TOKEN = "__TOKEN__";
-const TABS = [["home","Accueil"],["requests","Demandes"],["companies","Entreprises"],["discover","Détection"],["settings","Réglages"],["guide","Guide"]];
+const TABS = [["home","Accueil"],["requests","Demandes"],["companies","Entreprises"],["discover","Détection"],["footprint","Empreinte"],["settings","Réglages"],["guide","Guide"]];
 let S = null, tab = "home", sel = new Set(), csel = new Set(), msel = new Set(), found = null, filter = "", task = null;
-const JOB_NAMES = {update:"Mise à jour de la base", send:"Envoi des demandes", cycle:"Suivi automatique", mailscan:"Analyse de la boîte mail", userscan:"Recherche du pseudo"};
+const JOB_NAMES = {update:"Mise à jour de la base", send:"Envoi des demandes", cycle:"Suivi automatique", mailscan:"Analyse de la boîte mail", userscan:"Recherche du pseudo", footprint:"Recherche de vos traces", recheck:"Contrôle des pages"};
 const TONE = {draft:"",queued:"info",manual:"warn",sent:"info",reminded:"info",replied:"warn",needs_action:"warn",complaint_due:"bad",complaint_filed:"",done:"ok",refused:"bad",bounced:"bad"};
 const $ = (s, el=document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -109,7 +109,7 @@ async function refresh(light){
   }
   renderChrome();
   // On ne redessine que si quelque chose a changé, pour ne pas faire sauter un clic ou une saisie en cours.
-  const sig = JSON.stringify([S.requests, S.mail, S.companies, S.last_cycle, running(), S.mail_scan?.at, S.username_scan?.at, S.profile_ready, S.sent_today, S.shareable]);
+  const sig = JSON.stringify([S.requests, S.mail, S.companies, S.last_cycle, running(), S.mail_scan?.at, S.username_scan?.at, S.profile_ready, S.sent_today, S.shareable, S.footprint.findings.map(f => f.id + f.status + (f.request_status||"")).join(), S.footprint.last_scan?.at]);
   const changed = sig !== lastSig; lastSig = sig;
   if (!light || (changed && ["home","requests","discover"].includes(tab))) render();
 }
@@ -121,6 +121,8 @@ function jobDone(n, j){
   if (n === "send") toast(S.mail.test_mode ? `Mode test : ${r.test} courrier(s) écrit(s) dans le dossier des essais, rien n'a été envoyé. Le bouton pour l'ouvrir est sur l'accueil.` : `${r.sent} demande(s) envoyée(s)` + (r.errors?`, ${r.errors} en erreur`:"") + (r.left?`. Limite du jour atteinte : ${r.left} partiront au prochain suivi.`:"."));
   if (n === "update") { toast(`Base à jour : ${r.count} entreprises.`); found = null; tab === "companies" && render(); }
   if (n === "cycle") toast("Suivi terminé.");
+  if (n === "footprint") toast((r.new ? `${r.new} nouvelle(s) page(s) trouvée(s).` : "Aucune nouvelle page.") + (r.errors && r.errors.length ? ` ${r.errors.length} recherche(s) en échec : ${r.errors[0]}` : ""));
+  if (n === "recheck") toast(r.gone ? `${r.gone} page(s) ont disparu.` : `${r.checked} page(s) contrôlée(s) : aucune n'a disparu.`);
   if (n === "mailscan" || n === "userscan") { tab === "discover" && render(); }
 }
 let stopped = false;
@@ -135,7 +137,8 @@ let lastTick = Date.now();
 
 function renderChrome(){
   setHtml($("#nav"), TABS.map(([k,l]) => {
-    const n = k==="requests" ? (S.stats.replied||0)+(S.stats.complaint_due||0)+(S.stats.needs_action||0) : 0;
+    const n = k==="requests" ? (S.stats.replied||0)+(S.stats.complaint_due||0)+(S.stats.needs_action||0)
+            : k==="footprint" ? S.footprint.findings.filter(f => f.status==="new").length : 0;
     return `<button data-tab="${k}" class="${k===tab?"on":""}">${l}${n?` <span class="pill warn">${n}</span>`:""}</button>`;
   }).join(""));
   setHtml($("#mode"), S.mail.test_mode ? `<span class="pill warn" title="Aucun e-mail n'est envoyé">Mode test</span>` : `<span class="pill ok" title="« Envoyer » envoie de vrais e-mails">Envoi réel</span>`);
@@ -147,7 +150,7 @@ function renderChrome(){
 $("#nav").addEventListener("click", e => { const b=e.target.closest("button"); if(b){ tab=b.dataset.tab; renderChrome(); render(); if(tab==="settings") loadTask(); }});
 
 async function render(){
-  await ({home:rHome, requests:rRequests, companies:rCompanies, discover:rDiscover, settings:rSettings, guide:rGuide}[tab])();
+  await ({home:rHome, requests:rRequests, companies:rCompanies, discover:rDiscover, settings:rSettings, guide:rGuide, footprint:rFootprint}[tab])();
   // Relie chaque libellé au champ qui le suit (lecteurs d'écran, clic sur le libellé).
   document.querySelectorAll("#main label:not(.check)").forEach(l => { const f = l.nextElementSibling; if (f && f.id) l.htmlFor = f.id; });
 }
@@ -171,6 +174,7 @@ function rHome(){
     <div class="stat"><b>${n("complaint_due")}</b>plaintes CNIL à déposer</div>
     <div class="stat"><b>${n("done")}</b>suppressions confirmées</div>
     <div class="stat"><b>${n("draft")+n("queued")+n("manual")}</b>à envoyer</div>
+    <div class="stat"><b>${S.footprint.findings.filter(f => f.status==="new").length}</b>pages publiques à examiner</div>
   </div>
   <div class="card"><div class="row"><h2 class="grow">Mise en route</h2><button class="link" data-go="guide">Guide pas à pas</button></div>
     <ul class="steps">${steps.map(([ok,l,t]) => `<li><span class="dot" style="color:var(--${ok?"ok":"mute"})">${ok?"✓":"○"}</span><span class="grow">${l}</span>${ok?"":`<button class="link" data-go="${t}">Ouvrir</button>`}</li>`).join("")}</ul>
@@ -360,7 +364,7 @@ function rDiscover(){
     <p class="mute">Vérifie si un compte public porte ce pseudo sur plusieurs centaines de sites (liste du projet open source Sherlock). Il peut y avoir des faux positifs, et un compte trouvé peut appartenir à un homonyme.</p>
     <div class="row"><input type="text" id="un" placeholder="votre pseudo" value="${esc(us?us.username:"")}" style="max-width:260px"><button class="btn primary" id="us" ${busy?"disabled":""}>Chercher</button></div>
     ${us ? `<p class="mute small" style="margin-top:14px">« ${esc(us.username)} », le ${fdate(us.at)} : ${us.found.length} compte(s) possible(s) sur ${us.checked} sites ; ${us.unknown} sites n'ont pas pu être vérifiés.</p>
-    <p>${us.found.map(f => `<a href="${safeUrl(f.url)}" target="_blank" rel="noopener noreferrer">${esc(f.site)}</a>`).join(" · ")}</p>
+    <p>${us.found.map(f => `<span style="white-space:nowrap"><a href="${safeUrl(f.url)}" target="_blank" rel="noopener noreferrer">${esc(f.site)}</a>${f.delete&&f.delete.url?` (<a href="${safeUrl(f.delete.url)}" target="_blank" rel="noopener noreferrer" title="${esc(f.delete.notes||"")}">supprimer le compte</a>, ${esc(f.delete.difficulty)})`:""}</span>`).join(" · ")}</p>
     ${us.found.length?`<p class="mute small">Pour chaque compte qui est bien le vôtre : connectez-vous et supprimez-le depuis ses paramètres. Si vous n'y avez plus accès, ajoutez le site dans Entreprises et envoyez-lui une demande d'effacement.</p>`:""}`:""}
   </div>
   <div class="card"><h2>Fuites de données</h2><p class="mute">Pour savoir si votre adresse figure dans une fuite connue, utilisez <a href="https://haveibeenpwned.com/" target="_blank" rel="noopener noreferrer">haveibeenpwned.com</a> : la recherche manuelle y est gratuite (l'accès automatisé est payant, il n'est donc pas intégré ici).</p></div>`;
@@ -371,6 +375,120 @@ function rDiscover(){
   $("#main").querySelectorAll("[data-add]").forEach(b => b.onclick = async () => { tab="companies"; renderChrome(); await rCompanies(); $("#cn").value=b.dataset.add; $("#cw").value="https://"+b.dataset.dom; $("#ce").value=b.dataset.mail; $("#ce").focus(); $("#ce").select(); $("#ce").scrollIntoView({block:"center"});
     // Adresse automatique ou inconnue : on cherche tout de suite une meilleure adresse sur leur site.
     if (!b.dataset.mail || b.dataset.nr) { toast("Adresse d'envoi automatique : recherche d'une meilleure adresse sur leur site…"); findContact(); } });
+}
+
+/* ---------- Empreinte publique ---------- */
+const FT = {new:"warn", requested:"info", delisting:"info", account:"warn", removed:"ok", ignored:""};
+let ffilter = "open";
+function rFootprint(){
+  const F = S.footprint, fs = F.findings, st = F.settings, busy = running(), ls = F.last_scan;
+  const cnt = k => fs.filter(f => f.status===k).length, isOpen = f => !["ignored","removed"].includes(f.status);
+  const show = fs.filter(f => ffilter==="all" ? true : ffilter==="open" ? isOpen(f) : f.status===ffilter);
+  const ext = (u, l) => `<a href="${safeUrl(u)}" target="_blank" rel="noopener noreferrer">${l}</a>`;
+  const due = f => { if (f.status!=="delisting" || !f.due_at) return ""; const n = days(f.due_at); return `<div class="mute small">${n>=0 ? `réponse attendue dans ${n} j` : `<span style="color:var(--bad)">délai dépassé : plainte possible</span>`}</div>`; };
+  $("#main").innerHTML = `
+  <div class="card"><div class="row" style="margin-bottom:8px"><h2 class="grow">Pages qui parlent de vous</h2>
+      <select id="ff" style="width:auto"><option value="open" ${ffilter==="open"?"selected":""}>À traiter (${fs.filter(isOpen).length})</option><option value="all" ${ffilter==="all"?"selected":""}>Toutes (${fs.length})</option><option value="ignored" ${ffilter==="ignored"?"selected":""}>Écartées (${cnt("ignored")})</option><option value="removed" ${ffilter==="removed"?"selected":""}>Disparues (${cnt("removed")})</option></select>
+      <button class="btn" id="frecheck" ${busy?"disabled":""}>Vérifier si elles ont disparu</button></div>
+    <p class="mute small">Cliquez sur une page pour la traiter : la faire supprimer par le site, la faire retirer des moteurs de recherche, supprimer votre compte, ou l'écarter si elle ne vous concerne pas.</p>
+    <div class="row" style="margin-bottom:12px"><input type="text" id="furl" placeholder="Collez ici l'adresse d'une page qui vous concerne (https://…)" style="flex:1;min-width:220px"><button class="btn" id="fadd">Ajouter cette page</button></div>
+    ${show.length ? `<div class="scroll"><table><thead><tr><th>Page</th><th>Pourquoi elle est là</th><th>Statut</th><th>Trouvée</th></tr></thead><tbody>
+    ${show.map(f => `<tr class="click" data-f="${f.id}"><td><b>${esc(f.title || f.url)}</b><div class="mute small">${esc(f.domain)} · ${ext(f.url, "ouvrir")}</div></td>
+      <td class="small">${esc(F.evidence_labels[f.evidence] || "")}${f.note?`<div class="mute">${esc(f.note)}</div>`:""}</td>
+      <td><span class="pill ${FT[f.status]}">${esc(F.status_labels[f.status])}</span>${f.status==="requested"&&f.request_status?`<div class="mute small">demande : ${esc(S.status_labels[f.request_status]||"")}</div>`:""}${due(f)}</td>
+      <td class="small">${fdate(f.found_at)}</td></tr>`).join("")}</tbody></table></div>`
+    : `<p class="mute">${fs.length ? "Aucune page dans cette vue." : "Aucune page pour l'instant. Lancez une recherche ci-dessous, ou collez l'adresse d'une page que vous avez repérée."}</p>`}
+  </div>
+
+  <div class="card"><h2>Recherche automatique</h2>
+    <p class="mute">Cherche votre nom, vos e-mails, votre téléphone et vos pseudos, lit chaque page trouvée et ne garde que celles où vos données figurent vraiment. Elle ne porte que sur vous : l'e-mail de votre identité doit être celui de la messagerie connectée.</p>
+    ${F.blocked ? `<div class="note warn">${esc(F.blocked)}</div>` : ""}
+    <div class="grid">
+      <div><label>Moteur de recherche</label><select id="fp"><option value="" ${st.provider===""?"selected":""}>Aucun : recherches préparées seulement</option><option value="searxng" ${st.provider==="searxng"?"selected":""}>SearXNG (votre propre moteur)</option><option value="brave" ${st.provider==="brave"?"selected":""}>Brave Search (clé d'accès)</option></select></div>
+      <div id="fsx"><label>Adresse de votre SearXNG</label><input type="text" id="fsu" placeholder="http://127.0.0.1:8892" value="${esc(st.searxng_url)}"></div>
+      <div id="fbr"><label>Clé d'accès Brave ${st.has_key?"(enregistrée ; laisser vide pour la garder)":""}</label><input type="password" id="fbk" autocomplete="new-password" placeholder="${st.has_key?"••••••••":""}"></div>
+      <div><label>Vos pseudos, séparés par des virgules</label><input type="text" id="fps" value="${esc(st.pseudos.join(", "))}"></div>
+      <div><label>Sites à ne pas signaler (les vôtres, par exemple)</label><input type="text" id="fig" placeholder="monsite.fr, monblog.fr" value="${esc(st.ignore_domains.join(", "))}"></div>
+    </div>
+    <label class="check" style="margin-top:10px"><input type="checkbox" id="fwk" ${st.weekly?"checked":""}> Refaire la recherche chaque semaine, pendant le suivi automatique</label>
+    <label class="check"><input type="checkbox" id="fnt" ${st.notify?"checked":""}> M'envoyer un e-mail quand de nouvelles pages sont trouvées</label>
+    <div class="row" style="margin-top:10px"><button class="btn primary" id="fsave">Enregistrer</button><button class="btn" id="ftest">Tester le moteur</button><button class="btn" id="fscan" ${busy||!F.ready||F.blocked?"disabled":""}>Chercher maintenant</button><span id="fres" class="small"></span></div>
+    <p class="mute small" style="margin-top:10px">${ls ? `Dernière recherche le ${new Date(ls.at).toLocaleString("fr-FR")} : ${ls.new} nouvelle(s) page(s), ${ls.queries} recherche(s) lancée(s)${ls.errors&&ls.errors.length?`, ${ls.errors.length} en échec`:""}.` : "Aucune recherche lancée pour l'instant."} Le nom, les e-mails et le téléphone viennent de Réglages → Votre identité.</p>
+    <details><summary class="mute small" style="cursor:pointer">Quel moteur choisir ?</summary><p class="small" style="margin-top:8px"><b>SearXNG</b> est un moteur libre que l'on installe sur son propre serveur (une commande Docker) : gratuit et sans compte, il interroge les grands moteurs à votre place. Il faut y autoriser le format JSON. <b>Brave Search</b> fournit une clé d'accès sur api.search.brave.com, sans rien installer ; vérifiez sur leur site ce que l'offre gratuite permet. La marche à suivre est dans le fichier README du projet.</p></details>
+  </div>
+
+  <div class="card"><h2>Recherches préparées</h2>
+    <p class="mute">Sans moteur automatique, ouvrez ces recherches dans votre navigateur. Quand un résultat vous concerne, copiez son adresse et collez-la en haut de cette page.</p>
+    ${F.prepared.length ? F.prepared.map(g => `<h3 style="margin-top:14px">${esc(g.label)}</h3>` + g.items.map(i => `<div class="row small" style="padding:3px 0"><span style="min-width:210px">${esc(i.label)}</span><span>${i.links.map(l => ext(l.url, esc(l.engine))).join(" · ")}</span></div>`).join("")).join("") : `<p>Renseignez d'abord votre identité dans Réglages.</p>`}
+  </div>
+
+  <div class="card"><h2>Annuaires, registres et outils officiels</h2>
+    <p class="mute">Les endroits où une personne apparaît le plus souvent en France, avec la démarche pour s'en retirer. Cochez au fur et à mesure.</p>
+    ${F.checklist.map(c => `<label class="check" style="margin:12px 0"><input type="checkbox" data-ck="${esc(c.id)}" ${c.done?"checked":""}> <span><b>${esc(c.title)}</b>${c.done?` <span class="pill ok">fait le ${fdate(c.done)}</span>`:""}<br><span class="mute">${esc(c.text)}</span> ${ext(c.url, esc(c.link))}</span></label>`).join("")}
+  </div>`;
+  const prov = () => { const v = $("#fp").value; $("#fsx").classList.toggle("hide", v!=="searxng"); $("#fbr").classList.toggle("hide", v!=="brave"); };
+  prov(); $("#fp").onchange = prov;
+  $("#ff").onchange = e => { ffilter = e.target.value; rFootprint(); };
+  $("#frecheck").onclick = () => startJob("recheck", "/api/footprint/recheck", {});
+  $("#fadd").onclick = async () => { const r = await api("/api/footprint/add", {url: $("#furl").value}); ffilter = "open"; await refresh(); openFinding(r.id); };
+  const save = () => api("/api/footprint/settings", {provider:$("#fp").value, searxng_url:$("#fsu").value, brave_key:$("#fbk").value, pseudos:$("#fps").value, ignore_domains:$("#fig").value, weekly:$("#fwk").checked, notify:$("#fnt").checked});
+  $("#fsave").onclick = async () => { await save(); toast("Recherche automatique enregistrée."); await refresh(); };
+  $("#ftest").onclick = async () => { await save(); $("#fres").textContent = "Test en cours…"; const r = await api("/api/footprint/test", {}); await refresh(); $("#fres").innerHTML = r.ok ? `<b style="color:var(--ok)">Le moteur répond</b> (${r.count} résultats sur une recherche neutre).` : `<span style="color:var(--bad)">${esc(r.error)}</span>`; };
+  $("#fscan").onclick = async () => { await save(); await startJob("footprint", "/api/footprint/scan", {}); };
+  $("#main").querySelectorAll("[data-ck]").forEach(i => i.onchange = async () => { await api("/api/checklist", {id:i.dataset.ck, done:i.checked}); await refresh(); });
+  $("#main").querySelectorAll("tr[data-f]").forEach(tr => tr.onclick = e => { if (!e.target.closest("a")) openFinding(+tr.dataset.f); });
+}
+async function openFinding(id){
+  const f = S.footprint.findings.find(x => x.id === id); if (!f) return;
+  const F = S.footprint, d = $("#dlg"), B = (a,l,c="") => `<button class="btn ${c}" data-fa="${a}">${l}</button>`;
+  const ext = (u, l) => `<a href="${safeUrl(u)}" target="_blank" rel="noopener noreferrer">${l}</a>`;
+  const acts = {
+    new: B("request","Demander la suppression au site","primary") + B("delist","Faire retirer des moteurs de recherche") + B("account","C'est mon compte") + B("ignored","Écarter"),
+    requested: (f.request_id ? B("openreq","Voir la demande","primary") : "") + B("delist","Faire aussi retirer des moteurs") + B("removed","La page a disparu"),
+    delisting: B("removed","C'est retiré","primary") + B("request","Demander aussi la suppression au site") + B("new","Remettre à examiner"),
+    account: B("removed","Compte supprimé","primary") + B("request","Demander la suppression au site") + B("new","Remettre à examiner"),
+    removed: B("new","Remettre à examiner") + B("fdelete","Retirer de la liste","danger"),
+    ignored: B("new","Remettre à examiner") + B("fdelete","Retirer de la liste","danger"),
+  }[f.status];
+  d.innerHTML = `<div class="row"><h2 class="grow">${esc(f.title || f.domain)}</h2><span class="pill ${FT[f.status]}">${esc(F.status_labels[f.status])}</span></div>
+  <p class="small" style="overflow-wrap:anywhere">${ext(f.url, esc(f.url))}</p>
+  <p class="mute small">${esc(F.evidence_labels[f.evidence] || "")}${f.note?" · "+esc(f.note):""}${f.query?` · trouvée en cherchant ${esc(f.query)}`:""} · le ${fdate(f.found_at)}</p>
+  ${f.snippet?`<pre>${esc(f.snippet)}</pre>`:""}
+  ${f.delete?`<div class="note info"><b>Si c'est votre compte sur ${esc(f.delete.name)} :</b> suppression ${esc(f.delete.difficulty)}. ${f.delete.url?ext(f.delete.url, "Ouvrir la page de suppression du compte"):""}${f.delete.notes?`<br>${esc(f.delete.notes)}`:""}</div>`:""}
+  ${f.status==="account"&&!f.delete?`<div class="note info">Connectez-vous à ce site et cherchez « Supprimer mon compte » dans ses paramètres. Sans accès au compte, utilisez « Demander la suppression au site ».</div>`:""}
+  <div id="fbox"></div>
+  <div class="row" style="margin-top:14px">${acts}<span class="grow"></span><button class="btn" data-fa="close">Fermer</button></div>`;
+  const box = $("#fbox", d), done = async () => { d.close(); await refresh(); };
+  const request = async extra => {
+    const r = await api("/api/footprint/request", Object.assign({id}, extra || {}));
+    if (!r.need_contact){ toast(r.already_sent ? "Une demande est déjà partie vers ce site : la page y est rattachée." : "Demande préparée. Relisez-la dans l'onglet Demandes avant de l'envoyer."); return done(); }
+    box.innerHTML = `<div class="note warn" style="margin-top:12px">Ce site n'est pas dans la base : il faut une adresse où lui écrire. ${r.candidates.length ? "Adresses trouvées sur le site (cliquez pour en choisir une) :" : esc(r.error || "Aucune adresse trouvée sur le site.") + " Cherchez « contact », « mentions légales » ou « DPO » sur le site."}
+      ${r.candidates.map(c => `<div style="margin:5px 0"><button class="link" data-pick="${esc(c.email)}">${esc(c.email)}</button> <span class="pill">${esc(c.label)}</span> ${ext(c.source, "voir la page")}</div>`).join("")}</div>
+      <div class="grid"><div><label>Nom du site ou de l'éditeur</label><input type="text" id="fcn" value="${esc(r.domain)}"></div><div><label>Adresse e-mail où envoyer la demande</label><input type="email" id="fce" value="${esc(r.candidates.length && r.candidates[0].kind!=="other" ? r.candidates[0].email : "")}"></div></div>
+      <div class="row" style="margin-top:10px"><button class="btn primary" id="fcgo">Préparer la demande</button>${r.policy?ext(r.policy, "Ouvrir leur politique de confidentialité"):""}</div>`;
+    box.querySelectorAll("[data-pick]").forEach(b => b.onclick = () => { $("#fce").value = b.dataset.pick; });
+    $("#fcgo").onclick = () => request({email: $("#fce").value, name: $("#fcn").value});
+  };
+  const delist = async () => {
+    const i = await api("/api/footprint/delisting?id=" + id), late = f.status==="delisting" && f.due_at && days(f.due_at) < 0;
+    box.innerHTML = `<h3 style="margin-top:14px">Demande de déréférencement</h3>
+      <p class="small">Le moteur de recherche ne supprime pas la page, mais ne l'affiche plus quand on cherche votre nom. C'est un formulaire à remplir vous-même : collez-y l'adresse de la page et ce texte. Le moteur a un mois pour répondre.</p>
+      <pre id="dtx">${esc(i.text)}</pre>
+      <div class="row" style="margin-bottom:10px"><button class="btn" data-copy="dtx">Copier le texte</button>${i.links.map(l => ext(l.url, "Formulaire " + esc(l.engine))).join(" · ")}${f.status==="delisting"?"":`<button class="btn primary" data-fa="delisting">J'ai envoyé la demande</button>`}</div>
+      ${i.complaint ? `<details ${late?"open":""}><summary style="cursor:pointer" class="small">${late?"Délai dépassé : texte de la plainte CNIL":"En cas de refus ou sans réponse après un mois : plainte CNIL"}</summary><pre id="dcp" style="margin-top:8px">${esc(i.complaint)}</pre><div class="row"><button class="btn" data-copy="dcp">Copier le texte</button>${ext("https://www.cnil.fr/fr/plaintes", "Formulaire de plainte de la CNIL")}</div></details>` : ""}`;
+  };
+  d.onclick = async e => {
+    const c = e.target.dataset.copy; if (c){ await navigator.clipboard.writeText($("#"+c).textContent); return toast("Texte copié."); }
+    const a = e.target.dataset.fa; if (!a) return;
+    if (a === "close") return d.close();
+    if (a === "request") return request();
+    if (a === "delist") return delist();
+    if (a === "openreq"){ d.close(); return openRequest(f.request_id); }
+    if (a === "fdelete"){ if (!confirm("Retirer cette page de la liste ? Elle pourra être retrouvée par une prochaine recherche.")) return; await api("/api/footprint/delete", {ids:[id]}); return done(); }
+    await api("/api/footprint/action", {id, action:a}); return done();
+  };
+  d.showModal();
+  if (f.status === "delisting") delist();
 }
 
 /* ---------- Réglages ---------- */
@@ -498,6 +616,13 @@ function rGuide(){
       <li><b>Au démarrage de l'ordinateur :</b> à cocher si le PC n'est pas toujours allumé à 9 h. Le suivi se fait en arrière-plan à chaque ouverture de session.</li>
       <li><b>Sur un serveur</b> (mini-PC, NAS, Raspberry Pi allumé en permanence) : le suivi part chaque jour même PC éteint. Voir le dossier <code>serveur</code> du projet.</li></ul>
       <p>Vous pouvez aussi cliquer sur « Lancer le suivi maintenant » sur ${go("home","l'accueil")}. Fermer ou quitter l'application n'arrête pas le suivi automatique.</p>`],
+    ["empreinte", "11. Retrouver ce qui est public sur vous", `
+      <p>L'onglet ${go("footprint","Empreinte")} s'occupe des pages du web qui affichent votre nom, votre e-mail, votre téléphone ou un de vos pseudos.</p>
+      <ul><li><b>Trouver les pages :</b> soit avec les « recherches préparées », qui s'ouvrent dans votre navigateur, soit avec la recherche automatique si vous avez un moteur (SearXNG sur un serveur, ou une clé Brave Search). Celle-ci lit chaque page et ne garde que celles où vos données figurent ; elle peut repasser chaque semaine.</li>
+      <li><b>Les traiter :</b> cliquez sur une page, puis choisissez. « Demander la suppression au site » prépare un courrier qui cite la page (l'application cherche l'adresse du site). « Faire retirer des moteurs de recherche » prépare le texte du formulaire de Google et de Bing. « C'est mon compte » donne le lien pour le supprimer quand il est connu. « Écarter » si ce n'est pas vous.</li>
+      <li><b>Suivre :</b> le bouton « Vérifier si elles ont disparu » contrôle les pages en attente. Pour un déréférencement refusé ou resté sans réponse un mois, le texte de la plainte CNIL est prêt.</li>
+      <li><b>La liste guidée</b> en bas de l'onglet couvre les annuaires et registres français, et les outils officiels de Google.</li></ul>
+      <p>Les réseaux sociaux ne laissent pas chercher une personne par son nom de façon automatique : passez par les recherches préparées, et par les paramètres de vos propres comptes.</p>`],
     ["faq", "Questions fréquentes", `
       <p><b>Où sont mes données ?</b> Uniquement sur ${S.app.server?"votre serveur":"cet ordinateur"}, dans <code>${esc(S.app.data)}</code>. Rien n'est envoyé ailleurs qu'aux entreprises à qui vous écrivez et à votre propre messagerie.</p>
       <p><b>Est-ce légal ?</b> Oui : c'est l'exercice de votre droit à l'effacement (article 17 du RGPD) et d'opposition (article 21). C'est gratuit et l'entreprise doit répondre sous un mois.</p>

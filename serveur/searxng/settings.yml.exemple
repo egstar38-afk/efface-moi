@@ -1,0 +1,16 @@
+# Réglages minimaux de SearXNG pour Efface-moi. À copier dans config/settings.yml.
+use_default_settings: true
+
+server:
+  # À remplacer par une valeur à vous :  openssl rand -hex 32
+  secret_key: "REMPLACEZ-MOI"
+  # Pas de limiteur : le moteur n'est joignable que depuis la machine elle-même.
+  limiter: false
+  image_proxy: false
+
+search:
+  safe_search: 0
+  # Le format JSON est indispensable : c'est lui qu'Efface-moi interroge.
+  formats:
+    - html
+    - json

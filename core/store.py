@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "1.1.1"
+VERSION = "1.2.0"
 FROZEN = bool(getattr(sys, "frozen", False))      # vrai dans la version .exe
 ROOT = Path(__file__).resolve().parent.parent     # dossier du code (dans l'exe : dossier interne en lecture seule)
 
@@ -32,7 +32,14 @@ CREATE TABLE IF NOT EXISTS requests (
     status TEXT NOT NULL, recurring INTEGER NOT NULL DEFAULT 0,
     subject TEXT, body TEXT, message_id TEXT, reminder_message_id TEXT, complaint TEXT,
     created_at TEXT, sent_at TEXT, due_at TEXT, reminded_at TEXT, due2_at TEXT, closed_at TEXT,
-    reply_at TEXT, reply_from TEXT, reply_subject TEXT, ack_at TEXT, error TEXT, processing_at TEXT
+    reply_at TEXT, reply_from TEXT, reply_subject TEXT, ack_at TEXT, error TEXT, processing_at TEXT,
+    urls TEXT
+);
+CREATE TABLE IF NOT EXISTS findings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    url TEXT NOT NULL UNIQUE, domain TEXT, title TEXT, snippet TEXT,
+    source TEXT, query TEXT, evidence TEXT, status TEXT NOT NULL, request_id INTEGER, note TEXT,
+    found_at TEXT, status_at TEXT, due_at TEXT, checked_at TEXT
 );
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,8 +65,9 @@ def _migrate(con):
     if _migrated:
         return
     have = {row[1] for row in con.execute("PRAGMA table_info(requests)")}
-    if "processing_at" not in have:
-        con.execute("ALTER TABLE requests ADD COLUMN processing_at TEXT")
+    for column in ("processing_at", "urls"):
+        if column not in have:
+            con.execute("ALTER TABLE requests ADD COLUMN %s TEXT" % column)
     _migrated = True
 
 
@@ -116,7 +124,8 @@ def event(rid, type_, detail=""):
     execute("INSERT INTO events(request_id, at, type, detail) VALUES(?,?,?,?)", (rid, iso(), type_, detail))
 
 
-# --- Mot de passe de messagerie : chiffré par Windows (DPAPI), lisible uniquement par ce compte Windows. ---
+# --- Secrets (mot de passe de messagerie, clé de moteur de recherche) : chiffrés par Windows (DPAPI),
+# lisibles uniquement par ce compte Windows. Sur un autre système : simple encodage, dossier réservé au compte. ---
 
 def _dpapi(data, protect):
     import ctypes
@@ -138,21 +147,29 @@ def _dpapi(data, protect):
         ctypes.windll.kernel32.LocalFree(ctypes.cast(dst.pbData, ctypes.c_void_p))
 
 
-def set_password(pw):
-    if not pw:
-        set("mail_password", "")
+def set_secret(key, value):
+    if not value:
+        set(key, "")
     elif sys.platform == "win32":
-        set("mail_password", "dpapi:" + base64.b64encode(_dpapi(pw.encode("utf-8"), True)).decode())
+        set(key, "dpapi:" + base64.b64encode(_dpapi(value.encode("utf-8"), True)).decode())
     else:
-        set("mail_password", "plain:" + base64.b64encode(pw.encode("utf-8")).decode())
+        set(key, "plain:" + base64.b64encode(value.encode("utf-8")).decode())
 
 
-def get_password():
-    v = get("mail_password", "")
+def get_secret(key):
+    v = get(key, "")
     if not v:
         return ""
     kind, _, payload = v.partition(":")
     if kind == "dpapi" and sys.platform != "win32":
-        return ""       # base copiée depuis un PC Windows : le mot de passe est à ressaisir ici
+        return ""       # base copiée depuis un PC Windows : le secret est à ressaisir ici
     raw = base64.b64decode(payload)
     return (_dpapi(raw, False) if kind == "dpapi" else raw).decode("utf-8")
+
+
+def set_password(pw):
+    set_secret("mail_password", pw)
+
+
+def get_password():
+    return get_secret("mail_password")

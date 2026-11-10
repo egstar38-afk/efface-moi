@@ -1,4 +1,5 @@
 """Cycle de vie des demandes : création, envoi, détection des réponses, relances, plaintes, renouvellement."""
+import json
 import threading
 import time
 from datetime import datetime, timedelta
@@ -94,6 +95,27 @@ def create_requests(slugs, recurring=False):
         store.event(rid, "created", "")
         created.append(rid)
     return {"created": created, "skipped": skipped}
+
+
+def request_for_urls(slug, urls):
+    """Demande d'effacement citant des pages précises (module Empreinte). Tant que la demande au même site
+    n'est pas partie, les pages s'y ajoutent. Renvoie (id, True si une demande déjà envoyée couvre ce site)."""
+    company = companies.get(slug)
+    if not company:
+        raise ValueError("Entreprise introuvable.")
+    marks = ",".join("?" * len(CLOSED))
+    r = store.one("SELECT * FROM requests WHERE slug=? AND status NOT IN (%s) ORDER BY id DESC LIMIT 1" % marks,
+                  (slug, *CLOSED))
+    if r and r["status"] not in ("draft", "manual"):
+        return r["id"], True
+    if not r:
+        rid = create_requests([slug])["created"][0]
+        r = store.one("SELECT * FROM requests WHERE id=?", (rid,))
+    known = json.loads(r["urls"] or "[]")
+    merged = known + [u for u in urls if u not in known]
+    lang, subject, body = letters.erasure(profile(), company, urls=merged)
+    store.update_request(r["id"], urls=json.dumps(merged), lang=lang, subject=subject, body=body)
+    return r["id"], False
 
 
 def queue(ids):
@@ -283,6 +305,13 @@ def run_cycle(progress=lambda *a: None):
     out["complaints"] = escalate()
     out["renewed"] = renew()
     out["sending"] = send_queued(progress)
+    try:
+        from . import footprint     # import tardif : footprint dépend de ce module
+        found = footprint.weekly(progress)
+        if found:
+            out["footprint"] = found
+    except Exception as e:  # noqa: BLE001 - la recherche hebdomadaire ne doit jamais bloquer les relances
+        out["footprint_error"] = "%s : %s" % (type(e).__name__, mailer._clean(e))
     store.set("last_cycle", out)
     return out
 

@@ -1,0 +1,24 @@
+# SearXNG : moteur de recherche libre, pour la recherche automatique de l'onglet Empreinte.
+# Il n'écoute que sur la machine elle-même (127.0.0.1) : seul Efface-moi, installé à côté, l'interroge.
+#
+#   cp settings.yml.exemple config/settings.yml    puis remplacez la clé secrète (openssl rand -hex 32)
+#   docker compose up -d
+#   curl "http://127.0.0.1:8892/search?q=test&format=json"    doit répondre du JSON
+#
+# Dans Efface-moi : Empreinte -> Recherche automatique -> SearXNG -> http://127.0.0.1:8892
+services:
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8892:8080"
+    volumes:
+      - ./config:/etc/searxng
+    environment:
+      - SEARXNG_BASE_URL=http://127.0.0.1:8892/
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "1"

@@ -33,3 +33,7 @@ jobs:
         run: python tests/test_commu.py
         env:
           PYTHONUTF8: "1"
+      - name: Empreinte publique (faux moteur de recherche)
+        run: python tests/test_empreinte.py
+        env:
+          PYTHONUTF8: "1"
