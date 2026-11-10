@@ -174,6 +174,16 @@ bounce = engine.match_replies(store.rows("SELECT * FROM requests WHERE status='s
                                     "date": store.iso(store.now() + timedelta(hours=3))})])
 check("message non distribué reconnu", [(r, k) for r, k, _ in bounce] == [(a["id"], "bounce")])
 
+engine.apply_matches(engine.match_replies(store.rows("SELECT * FROM requests WHERE id=?", (c["id"],)),
+                                          [H(**{"from": "dpo@courtier.example", "subject": "Bien reçu",
+                                                "date": store.iso(store.now() + timedelta(hours=4))})]))
+due_before = engine.detail(c["id"])["due_at"]
+engine.set_status(c["id"], "processing")
+d = engine.detail(c["id"])
+check("« en cours de traitement » : retour en attente, échéance inchangée, mention gardée",
+      d["status"] == "sent" and d["due_at"] == due_before and d["processing_at"]
+      and [r for r in engine.list_requests() if r["id"] == c["id"]][0]["processing_at"])
+
 print("Relance, plainte, renouvellement")
 past = store.iso(store.now() - timedelta(days=1))
 store.update_request(a["id"], due_at=past, sent_at=store.iso(store.now() - timedelta(days=32)))
@@ -214,6 +224,13 @@ check("adresse lue par quelqu'un préférée à la plus fréquente",
       discover.best_address(senders["boutique.example"]["addresses"]) == ("service.client@boutique.example", False))
 check("adresse automatique signalée quand il n'y a qu'elle",
       discover.best_address(senders["promo.example"]["addresses"]) == ("newsletter@promo.example", True))
+
+print("Base créée par une version plus ancienne")
+with store.db() as con:
+    con.execute("ALTER TABLE requests DROP COLUMN processing_at")
+store._migrated = False
+check("colonne manquante ajoutée sans perdre les demandes", len(engine.list_requests()) >= 3
+      and all("processing_at" in r for r in engine.list_requests()))
 
 print("Mot de passe")
 store.set_password("abcd efgh")

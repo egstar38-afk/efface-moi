@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 FROZEN = bool(getattr(sys, "frozen", False))      # vrai dans la version .exe
 ROOT = Path(__file__).resolve().parent.parent     # dossier du code (dans l'exe : dossier interne en lecture seule)
 
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS requests (
     status TEXT NOT NULL, recurring INTEGER NOT NULL DEFAULT 0,
     subject TEXT, body TEXT, message_id TEXT, reminder_message_id TEXT, complaint TEXT,
     created_at TEXT, sent_at TEXT, due_at TEXT, reminded_at TEXT, due2_at TEXT, closed_at TEXT,
-    reply_at TEXT, reply_from TEXT, reply_subject TEXT, ack_at TEXT, error TEXT
+    reply_at TEXT, reply_from TEXT, reply_subject TEXT, ack_at TEXT, error TEXT, processing_at TEXT
 );
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,6 +49,20 @@ def iso(dt=None):
     return (dt or now()).isoformat(timespec="seconds")
 
 
+_migrated = False
+
+
+def _migrate(con):
+    """Ajoute aux bases créées par une version plus ancienne les colonnes apparues depuis."""
+    global _migrated
+    if _migrated:
+        return
+    have = {row[1] for row in con.execute("PRAGMA table_info(requests)")}
+    if "processing_at" not in have:
+        con.execute("ALTER TABLE requests ADD COLUMN processing_at TEXT")
+    _migrated = True
+
+
 @contextlib.contextmanager
 def db():
     if not DATA_DIR.exists():
@@ -59,6 +73,7 @@ def db():
     con.row_factory = sqlite3.Row
     try:
         con.executescript(SCHEMA)
+        _migrate(con)
         yield con
         con.commit()
     finally:

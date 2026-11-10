@@ -217,7 +217,7 @@ function rRequests(){
     ${list.length ? `<div class="scroll"><table><thead><tr><th><input type="checkbox" id="all"></th><th>Entreprise</th><th>Statut</th><th>Envoyée</th><th>Échéance</th><th>Dernier message reçu</th></tr></thead><tbody>
     ${list.map(r => `<tr class="click" data-id="${r.id}"><td><input type="checkbox" data-c="${r.id}" ${sel.has(r.id)?"checked":""}></td>
       <td><b>${esc(r.name)}</b>${r.recurring?` <span class="pill" title="Renouvelée automatiquement">↻</span>`:""}<div class="mute small">${esc(r.email || (r.webform ? "formulaire en ligne" : "courrier postal"))}</div>${r.error?`<div class="small" style="color:var(--bad)">${esc(r.error)}</div>`:""}</td>
-      <td><span class="pill ${TONE[r.status]}">${esc(S.status_labels[r.status])}</span></td>
+      <td><span class="pill ${TONE[r.status]}">${esc(S.status_labels[r.status])}</span>${r.processing_at&&["sent","reminded"].includes(r.status)?`<div class="mute small" style="margin-top:3px">ils disent traiter la demande (${fdate(r.processing_at)})</div>`:""}</td>
       <td>${fdate(r.sent_at)}</td><td>${deadline(r)}</td>
       <td class="small">${r.reply_at?`${fdate(r.reply_at)} — ${esc(r.reply_subject)}`:r.ack_at?`<span class="mute">accusé de réception le ${fdate(r.ack_at)}</span>`:""}</td></tr>`).join("")}
     </tbody></table></div>` : `<p class="mute">Aucune demande pour l'instant. Choisissez des entreprises dans l'onglet Entreprises ou Détection.</p>`}
@@ -234,10 +234,11 @@ function rRequests(){
   });
 }
 const EVENT = {created:"Brouillon créé", sent:"Demande envoyée", test:"Essai", error:"Erreur", reply:"Réponse reçue", ack:"Accusé de réception automatique", bounce:"Message non distribué", reminder_sent:"Relance envoyée", complaint_due:"Plainte à déposer", manual:"Action manuelle"};
+const ACTION = {done:"Vous avez indiqué : suppression confirmée", refused:"Vous avez indiqué : ils refusent", needs_action:"Vous avez indiqué : ils demandent quelque chose", processing:"Vous avez indiqué : en cours de traitement chez eux", waiting:"Remise en attente", sent_manually:"Envoyée par vos soins", complaint_due:"Plainte à préparer", complaint_filed:"Plainte déposée", unqueue:"Retirée de la file d'envoi"};
 async function openRequest(id){
   const r = await api("/api/request?id="+id), d = $("#dlg");
   const B = (a,l,c="") => `<button class="btn ${c}" data-a="${a}">${l}</button>`;
-  const outcome = B("done","Suppression confirmée","primary") + B("needs_action","Ils demandent quelque chose") + B("refused","Ils refusent");
+  const outcome = B("done","Suppression confirmée","primary") + B("processing","En cours de traitement") + B("needs_action","Ils demandent quelque chose") + B("refused","Ils refusent");
   const acts = {
     draft: B("send","Envoyer","primary") + B("delete","Supprimer","danger"),
     queued: B("unqueue","Retirer de la file"),
@@ -245,7 +246,7 @@ async function openRequest(id){
     sent: outcome + B("complaint_due","Préparer la plainte CNIL"),
     reminded: outcome + B("complaint_due","Préparer la plainte CNIL"),
     replied: outcome + B("waiting","Ce n'était pas une réponse"),
-    needs_action: B("waiting","J'ai répondu, j'attends","primary") + B("done","Suppression confirmée") + B("refused","Ils refusent"),
+    needs_action: B("waiting","J'ai répondu, j'attends","primary") + B("processing","En cours de traitement") + B("done","Suppression confirmée") + B("refused","Ils refusent"),
     complaint_due: B("complaint_filed","Plainte déposée","primary") + B("done","Finalement, suppression confirmée"),
     refused: B("complaint_filed","Plainte déposée","primary"),
     done: B("waiting","Rouvrir"), complaint_filed: B("done","Suppression confirmée"), bounced: B("delete","Supprimer","danger"),
@@ -258,7 +259,7 @@ async function openRequest(id){
   ${r.complaint?`<h3>Plainte CNIL</h3><pre id="cp">${esc(r.complaint)}</pre><div class="row" style="margin-bottom:14px"><button class="btn" data-copy="cp">Copier le texte</button><a href="https://www.cnil.fr/fr/plaintes" target="_blank" rel="noopener noreferrer">Ouvrir le formulaire de plainte de la CNIL</a></div>`:""}
   <h3>${esc(r.subject)}</h3><pre id="bd">${esc(r.body)}</pre>
   <div class="row" style="margin-bottom:14px"><button class="btn" data-copy="bd">Copier le texte</button></div>
-  <h3>Historique</h3><p class="small">${r.events.map(e => `${new Date(e.at).toLocaleString("fr-FR")} — ${EVENT[e.type]||esc(e.type)}${e.detail&&e.type!=="manual"?" : "+esc(e.detail):""}`).join("<br>")}</p>
+  <h3>Historique</h3><p class="small">${r.events.map(e => `${new Date(e.at).toLocaleString("fr-FR")} — ${e.type==="manual" ? (ACTION[e.detail]||"Action manuelle") : (EVENT[e.type]||esc(e.type)) + (e.detail ? " : "+esc(e.detail) : "")}`).join("<br>")}</p>
   <div class="row" style="margin-top:16px">${acts}<span class="grow"></span><button class="btn" data-a="close">Fermer</button></div>`;
   d.onclick = async e => {
     const c = e.target.dataset.copy; if (c){ await navigator.clipboard.writeText($("#"+c).textContent); return toast("Texte copié."); }
@@ -479,7 +480,7 @@ function rGuide(){
       <p>L'entreprise a <b>un mois</b> pour répondre. L'application lit votre boîte de réception et met chaque demande à jour. Votre seule tâche : lire les réponses et dire ce qu'elles contiennent.</p>
       <div class="scroll"><table><thead><tr><th>Statut</th><th>Ce que ça veut dire</th><th>Ce que vous faites</th></tr></thead><tbody>
       <tr><td><span class="pill info">Envoyée, en attente</span></td><td>Le délai d'un mois court. Un accusé de réception automatique ne l'arrête pas.</td><td>Rien.</td></tr>
-      <tr><td><span class="pill warn">Réponse reçue, à lire</span></td><td>Un message de l'entreprise est arrivé.</td><td>Lisez-le dans votre boîte mail, puis cliquez sur « Suppression confirmée », « Ils demandent quelque chose » ou « Ils refusent ». Si ce n'était qu'une publicité : « Ce n'était pas une réponse ».</td></tr>
+      <tr><td><span class="pill warn">Réponse reçue, à lire</span></td><td>Un message de l'entreprise est arrivé.</td><td>Lisez-le dans votre boîte mail, puis cliquez sur « Suppression confirmée », « Ils demandent quelque chose » ou « Ils refusent ». S'ils disent seulement avoir bien reçu la demande et la traiter : « En cours de traitement » ; la demande repasse en attente et la relance partira quand même au bout d'un mois. Si ce n'était qu'une publicité : « Ce n'était pas une réponse ».</td></tr>
       <tr><td><span class="pill warn">Ils demandent quelque chose</span></td><td>Souvent une confirmation depuis l'adresse concernée, parfois une pièce d'identité.</td><td>Répondez-leur depuis votre messagerie, puis « J'ai répondu, j'attends ». Une pièce d'identité ne peut être exigée qu'en cas de doute sérieux sur votre identité.</td></tr>
       <tr><td><span class="pill info">Relancée, en attente</span></td><td>Pas de réponse après un mois : une relance est partie toute seule. Ils ont 15 jours.</td><td>Rien.</td></tr>
       <tr><td><span class="pill bad">Plainte CNIL à déposer</span></td><td>Toujours rien après la relance.</td><td>Voir l'étape 9.</td></tr>

@@ -305,6 +305,12 @@ def set_status(rid, action):
         if not r["sent_at"]:
             raise ValueError("Cette demande n'a pas encore été envoyée.")
         store.update_request(rid, status="reminded" if r["reminded_at"] else "sent", closed_at=None)
+    elif action == "processing":   # « nous avons bien reçu votre demande, nous la traitons »
+        # Ce n'est pas encore une réponse sur le fond : la demande repasse en attente et le délai d'un mois
+        # continue de courir. Sans suite de leur part, la relance partira donc comme prévu.
+        if not r["sent_at"]:
+            raise ValueError("Cette demande n'a pas encore été envoyée.")
+        store.update_request(rid, status="reminded" if r["reminded_at"] else "sent", processing_at=t, closed_at=None)
     elif action == "sent_manually":  # demande déposée via le formulaire du site
         now = store.now()
         store.update_request(rid, status="sent", sent_at=store.iso(now),
@@ -363,7 +369,7 @@ def mark_shared(slug):
 
 def list_requests():
     cols = ("id, slug, name, email, webform, lang, status, recurring, created_at, sent_at, due_at, reminded_at, "
-            "due2_at, closed_at, reply_at, reply_from, reply_subject, ack_at, error")
+            "due2_at, closed_at, reply_at, reply_from, reply_subject, ack_at, error, processing_at")
     return store.rows("SELECT %s FROM requests ORDER BY id DESC" % cols)
 
 
