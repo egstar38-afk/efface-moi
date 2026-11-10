@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "name": "Qonto",
+    "email": "dpo@qonto.com",
+    "web": "https://qonto.com",
+    "webform": "",
+    "added": "2026-11-10",
+    "issue": 1
+  }
+]
