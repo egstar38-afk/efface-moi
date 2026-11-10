@@ -45,6 +45,7 @@ def state():
         "last_check": store.get("last_check"), "mail_scan": store.get("mail_scan"),
         "username_scan": store.get("username_scan"),
         "custom": [companies.summary(c) for c in store.get("custom_companies", [])],
+        "shareable": engine.shareable(),
         "app": {"version": store.VERSION, "exe": store.FROZEN, "server": SERVER_MODE, "windows": sys.platform == "win32",
                 "data": str(store.DATA_DIR), "outbox": str(mailer.OUTBOX)},
     }
@@ -126,6 +127,7 @@ POST = {
     "/api/task/disable": lambda b: (task.disable(), task.full_status())[1],
     "/api/startup/enable": lambda b: (task.startup_enable(), task.full_status())[1],
     "/api/startup/disable": lambda b: (task.startup_disable(), task.full_status())[1],
+    "/api/share/done": lambda b: engine.mark_shared(str(b.get("slug", ""))[:200]),
     "/api/open-folder": lambda b: open_folder(b),
     "/api/quit": lambda b: quit_app(b),
 }

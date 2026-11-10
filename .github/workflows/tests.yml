@@ -29,3 +29,7 @@ jobs:
         run: python tests/test_contact.py
         env:
           PYTHONUTF8: "1"
+      - name: Partage d'adresses
+        run: python tests/test_commu.py
+        env:
+          PYTHONUTF8: "1"

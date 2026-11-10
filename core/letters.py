@@ -118,7 +118,7 @@ def en_date(iso_str):
 
 def language_for(company):
     countries = set(company.get("relevant-countries") or [])
-    if company.get("custom") or countries & FRENCH_SPEAKING:
+    if company.get("custom") or company.get("community") or countries & FRENCH_SPEAKING:
         return "fr"
     # Beaucoup d'entreprises françaises sont classées « tous pays » : on regarde aussi l'adresse et le domaine.
     last_line = (company.get("address") or "").strip().splitlines()[-1:] or [""]

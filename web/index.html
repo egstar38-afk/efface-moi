@@ -27,8 +27,8 @@ label{display:block;font-size:13px;color:var(--mute);margin-bottom:3px}
 input[type=text],input[type=email],input[type=password],input[type=number],select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink);font:inherit}
 textarea{min-height:64px;resize:vertical}
 label.check{display:flex;gap:8px;align-items:flex-start;color:var(--ink);font-size:14px;margin:6px 0}
-button.btn{padding:8px 14px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;cursor:pointer}
-button.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+button.btn,a.btn{padding:8px 14px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;cursor:pointer}
+button.btn.primary,a.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
 button.btn.danger{color:var(--bad)}button.btn:disabled{opacity:.5;cursor:default}
 button.link{background:none;border:0;color:var(--accent);padding:0;font:inherit;cursor:pointer;text-decoration:underline}
 a{color:var(--accent)}
@@ -109,7 +109,7 @@ async function refresh(light){
   }
   renderChrome();
   // On ne redessine que si quelque chose a changé, pour ne pas faire sauter un clic ou une saisie en cours.
-  const sig = JSON.stringify([S.requests, S.mail, S.companies, S.last_cycle, running(), S.mail_scan?.at, S.username_scan?.at, S.profile_ready, S.sent_today]);
+  const sig = JSON.stringify([S.requests, S.mail, S.companies, S.last_cycle, running(), S.mail_scan?.at, S.username_scan?.at, S.profile_ready, S.sent_today, S.shareable]);
   const changed = sig !== lastSig; lastSig = sig;
   if (!light || (changed && ["home","requests","discover"].includes(tab))) render();
 }
@@ -175,12 +175,19 @@ function rHome(){
   <div class="card"><div class="row"><h2 class="grow">Mise en route</h2><button class="link" data-go="guide">Guide pas à pas</button></div>
     <ul class="steps">${steps.map(([ok,l,t]) => `<li><span class="dot" style="color:var(--${ok?"ok":"mute"})">${ok?"✓":"○"}</span><span class="grow">${l}</span>${ok?"":`<button class="link" data-go="${t}">Ouvrir</button>`}</li>`).join("")}</ul>
   </div>
+  ${S.shareable.length ? `<div class="card"><h2>Aider les autres utilisateurs</h2>
+    <p class="mute">Ces adresses, que vous avez ajoutées vous-même, ont fonctionné. Vous pouvez les proposer pour qu'elles soient ajoutées à la base de tous les utilisateurs. Seuls le nom de l'entreprise, son site et cette adresse sont transmis : rien sur vous. La proposition s'ouvre sur GitHub (compte nécessaire), où elle est relue avant publication.</p>
+    <table><tbody>${S.shareable.map(c => `<tr><td><b>${esc(c.name)}</b><div class="mute small">${esc(c.email)}</div></td><td><span class="pill ok">${esc(c.outcome)}</span></td>
+      <td style="text-align:right;white-space:nowrap"><a class="btn primary" style="text-decoration:none;display:inline-block" href="${safeUrl(c.url)}" target="_blank" rel="noopener noreferrer" data-shared="${esc(c.slug)}">Partager cette adresse</a> <button class="link" data-skip="${esc(c.slug)}">Ne pas partager</button></td></tr>`).join("")}</tbody></table></div>` : ""}
   <div class="card"><h2>Suivi automatique</h2>
     <p class="mute">Lit les réponses dans votre boîte de réception, relance les entreprises qui n'ont pas répondu après un mois, prépare la plainte CNIL 15 jours plus tard, et redemande l'effacement aux courtiers tous les ${S.automation.repeat_months||"—"} mois.</p>
     <div class="row"><button class="btn primary" id="cycle" ${running()?"disabled":""}>Lancer le suivi maintenant</button>
     <span class="mute small">${lc ? "Dernier passage : "+new Date(lc.at).toLocaleString("fr-FR")+cycleSummary(lc) : "Jamais lancé."} Pour qu'il tourne seul chaque jour : Réglages → Automatisation.</span></div>
   </div>`;
   $("#cycle").onclick = () => startJob("cycle", "/api/cycle", {});
+  const shared = async slug => { await api("/api/share/done", {slug}); await refresh(); };
+  $("#main").querySelectorAll("[data-shared]").forEach(a => a.onclick = () => { setTimeout(() => shared(a.dataset.shared), 500); toast("La proposition s'ouvre sur GitHub : vérifiez-la, puis cliquez sur « Submit new issue »."); });
+  $("#main").querySelectorAll("[data-skip]").forEach(b => b.onclick = () => shared(b.dataset.skip));
   $("#main").querySelectorAll("[data-go]").forEach(b => b.onclick = () => { tab=b.dataset.go; renderChrome(); render(); if(tab==="settings") loadTask(); });
 }
 function cycleSummary(c){
@@ -273,7 +280,7 @@ async function rCompanies(){
   const open = new Set(S.requests.filter(r => !["done","refused","complaint_filed","bounced"].includes(r.status)).map(r => r.slug));
   const list = found ? found.companies : [];
   $("#main").innerHTML = `<div class="card"><div class="row"><div class="grow"><h2>Base des entreprises</h2>
-    <p class="mute small">${S.companies.count ? `${S.companies.count} fiches, mises à jour le ${fdate(S.companies.updated)}.` : "Pas encore téléchargée."} Source : projet open source datarequests.org (base surtout allemande et internationale ; complétez avec vos propres entreprises ci-dessous).</p></div>
+    <p class="mute small">${S.companies.count ? `${S.companies.count} fiches${S.companies.community?`, plus ${S.companies.community} adresse(s) partagée(s) par les utilisateurs`:""}, mises à jour le ${fdate(S.companies.updated)}.` : "Pas encore téléchargée."} Source : projet open source datarequests.org (base surtout allemande et internationale ; complétez avec vos propres entreprises ci-dessous).</p></div>
     <button class="btn ${S.companies.count?"":"primary"}" id="upd" ${running()?"disabled":""}>${S.companies.count?"Mettre à jour":"Télécharger la base"}</button></div></div>
   ${S.companies.count ? `<div class="card">
     <div class="row" style="margin-bottom:12px"><select id="preset" style="width:auto;max-width:100%">
@@ -286,7 +293,7 @@ async function rCompanies(){
       <button class="btn primary" id="mk" ${csel.size?"":"disabled"}>Préparer ${csel.size} demande(s)</button></div>
     <div class="scroll" style="max-height:480px;overflow-y:auto"><table><thead><tr><th></th><th>Entreprise</th><th>Contact</th><th>Catégories</th></tr></thead><tbody>
     ${list.map(c => `<tr><td><input type="checkbox" data-s="${esc(c.slug)}" ${csel.has(c.slug)?"checked":""} ${open.has(c.slug)?"disabled title='Demande déjà en cours'":""}></td>
-      <td><b>${esc(c.name)}</b>${open.has(c.slug)?` <span class="pill info">en cours</span>`:""}${c.needs_id?` <span class="pill warn" title="Cette entreprise exige une pièce d'identité">pièce d'identité</span>`:""}<div class="mute small">${esc(c.web)}</div></td>
+      <td><b>${esc(c.name)}</b>${open.has(c.slug)?` <span class="pill info">en cours</span>`:""}${c.community?` <span class="pill ok" title="Adresse proposée par un utilisateur et relue">partagée</span>`:""}${c.needs_id?` <span class="pill warn" title="Cette entreprise exige une pièce d'identité">pièce d'identité</span>`:""}<div class="mute small">${esc(c.web)}</div></td>
       <td class="small">${c.email?esc(c.email):`<span class="pill warn">${c.webform?"formulaire seulement":"courrier postal seulement"}</span>`}${c.custom?` <button class="link" data-rm="${esc(c.slug)}">retirer</button>`:""}</td>
       <td class="small mute">${esc(c.categories.join(", "))}</td></tr>`).join("")}
     </tbody></table></div></div>` : ""}
@@ -458,6 +465,7 @@ function rGuide(){
       <li>Gardez le filtre « Courtiers en données, publicité… — France », ou cherchez un nom.</li>
       <li>Cochez les entreprises, puis « Préparer les demandes ». Rien n'est envoyé à cette étape.</li></ol>
       <p><b>Entreprise absente de la base :</b> utilisez « Ajouter une entreprise » en bas de la page. Le bouton « Chercher l'adresse sur leur site » lit leur politique de confidentialité et propose l'adresse de leur délégué à la protection des données (DPO). Vérifiez toujours l'adresse proposée avec le lien « voir la page ».</p>
+      <p><b>Partager une adresse qui a marché :</b> quand une entreprise que vous avez ajoutée vous-même a répondu, l'accueil vous propose de partager son adresse. Elle rejoint alors, après relecture, la base de tous les utilisateurs (filtre « Adresses partagées par les utilisateurs »). Rien de personnel n'est transmis.</p>
       <p>La base vient du projet libre datarequests.org. Elle est surtout allemande et internationale : les entreprises françaises y sont peu nombreuses, d'où l'intérêt de l'étape suivante.</p>`],
     ["detection", "6. Trouver qui a vos données", `
       <p>Dans ${go("discover","Détection")} :</p>

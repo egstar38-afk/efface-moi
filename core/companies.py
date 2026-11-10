@@ -4,6 +4,7 @@ import io
 import json
 import re
 import unicodedata
+import urllib.parse
 import urllib.request
 import zipfile
 from datetime import datetime
@@ -12,6 +13,11 @@ from . import store
 
 DATA_ZIP = "https://github.com/datenanfragen/data/archive/refs/heads/master.zip"
 COMPANIES_FILE = store.DATA_DIR / "companies.json"
+# Adresses partagées par les utilisateurs, relues avant publication (voir communaute/ et outils/adresse.py).
+REPO = "egstar38-afk/efface-moi"
+COMMUNITY_URL = "https://raw.githubusercontent.com/%s/main/communaute/entreprises.json" % REPO
+ISSUE_URL = "https://github.com/%s/issues/new" % REPO
+EMAIL_RE = re.compile(r"[^@\s<>\"']+@[^@\s<>\"']+\.[A-Za-z]{2,24}")
 KEEP = ("slug", "name", "email", "web", "webform", "address", "categories", "relevant-countries",
         "runs", "required-elements", "suggested-transport-medium", "quality", "needs-id-document")
 
@@ -22,9 +28,41 @@ PRESETS = {
     "brokers_fr": "Courtiers en données, publicité et fichiers de solvabilité — France",
     "brokers_all": "Courtiers en données, publicité et fichiers de solvabilité — toute l'Europe",
     "fr": "Toutes les entreprises référencées pour la France",
+    "community": "Adresses partagées par les utilisateurs",
 }
 
-_cache = {"mtime": None, "data": None}
+_cache = {"mtime": None, "data": None, "domains": frozenset()}
+
+
+def clean_community(items):
+    """Ne garde que des fiches saines : ce fichier vient d'Internet, on ne lui fait pas confiance les yeux fermés."""
+    out, seen = [], set()
+    for it in items if isinstance(items, list) else []:
+        if not isinstance(it, dict):
+            continue
+        name = " ".join(str(it.get("name") or "").split())[:120]
+        email = str(it.get("email") or "").strip().lower()[:200]
+        if not name or not EMAIL_RE.fullmatch(email):
+            continue
+        links = {}
+        for k in ("web", "webform"):
+            v = str(it.get(k) or "").strip()[:300]
+            links[k] = v if re.match(r"https?://[^\s<>\"']+$", v, re.I) else ""
+        slug = "commu-" + (norm(name).replace(" ", "-") or "entreprise")
+        if slug in seen:
+            continue
+        seen.add(slug)
+        out.append({"slug": slug, "name": name, "email": email, "web": links["web"], "webform": links["webform"],
+                    "categories": [], "relevant-countries": ["fr"], "community": True})
+        if len(out) >= 5000:
+            break
+    return out
+
+
+def fetch_community():
+    req = urllib.request.Request(COMMUNITY_URL, headers={"User-Agent": "efface-moi"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return clean_community(json.loads(r.read(2 * 1024 * 1024).decode("utf-8")))
 
 
 def update(progress=lambda *a: None):
@@ -51,7 +89,12 @@ def update(progress=lambda *a: None):
         raise RuntimeError("Base téléchargée incomplète (%d fiches), ancienne base conservée." % len(companies))
     companies.sort(key=lambda c: c["name"].lower())
     store.DATA_DIR.mkdir(exist_ok=True)
-    payload = {"updated": datetime.now().isoformat(timespec="seconds"), "companies": companies}
+    progress(len(companies), len(companies), "Adresses partagées par les utilisateurs…")
+    try:
+        community = fetch_community()
+    except Exception:  # noqa: BLE001 - fichier injoignable ou abîmé : on garde la liste précédente
+        community = _load().get("community", [])
+    payload = {"updated": datetime.now().isoformat(timespec="seconds"), "companies": companies, "community": community}
     COMPANIES_FILE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     _cache["mtime"] = None
     return len(companies)
@@ -59,24 +102,54 @@ def update(progress=lambda *a: None):
 
 def _load():
     if not COMPANIES_FILE.exists():
-        return {"updated": None, "companies": []}
+        return {"updated": None, "companies": [], "community": []}
     mtime = COMPANIES_FILE.stat().st_mtime
     if _cache["mtime"] != mtime:
-        _cache["data"] = json.loads(COMPANIES_FILE.read_text(encoding="utf-8"))
+        data = json.loads(COMPANIES_FILE.read_text(encoding="utf-8"))
+        data["community"] = clean_community(data.get("community", []))
+        _cache["data"] = data
+        _cache["domains"] = _domains(data["companies"])
         _cache["mtime"] = mtime
     return _cache["data"]
 
 
+def _domains(items):
+    found = set()
+    for c in items:
+        for src in (c.get("email"), c.get("web")):
+            d = base_domain(src)
+            if d and d not in FREEMAIL:
+                found.add(d)
+    return frozenset(found)
+
+
 def info():
     d = _load()
-    return {"updated": d["updated"], "count": len(d["companies"])}
+    return {"updated": d["updated"], "count": len(d["companies"]), "community": len(community())}
+
+
+def community():
+    """Adresses partagées, sauf celles d'entreprises déjà dans la base ou ajoutées à la main."""
+    data = _load()
+    custom = store.get("custom_companies", [])
+    taken = _cache["domains"] | _domains(custom)
+    slugs = {c["slug"] for c in custom}
+    return [c for c in data.get("community", []) if c["slug"] not in slugs and base_domain(c["email"]) not in taken]
 
 
 def all_companies():
-    """Entreprises ajoutées à la main d'abord : elles priment sur la base en cas de doublon."""
+    """Ordre de priorité en cas de doublon : ajoutées à la main, base datarequests, puis adresses partagées."""
     custom = store.get("custom_companies", [])
     seen = {c["slug"] for c in custom}
-    return custom + [c for c in _load()["companies"] if c["slug"] not in seen]
+    return custom + [c for c in _load()["companies"] if c["slug"] not in seen] + community()
+
+
+def share_url(company, outcome):
+    """Lien vers le formulaire de proposition, pré-rempli. Ne contient que les coordonnées de l'entreprise."""
+    q = {"template": "adresse.yml", "title": "Adresse : %s" % company["name"], "nom": company["name"],
+         "email": company.get("email") or "", "site": company.get("web") or "",
+         "formulaire": company.get("webform") or "", "resultat": outcome}
+    return ISSUE_URL + "?" + urllib.parse.urlencode(q)
 
 
 def get(slug):
@@ -105,7 +178,8 @@ def summary(c):
         "slug": c["slug"], "name": c["name"], "email": c.get("email") or "",
         "webform": c.get("webform") or "", "web": c.get("web") or "",
         "categories": c.get("categories") or [], "countries": c.get("relevant-countries") or ["all"],
-        "custom": bool(c.get("custom")), "needs_id": bool(c.get("needs-id-document")),
+        "custom": bool(c.get("custom")), "community": bool(c.get("community")),
+        "needs_id": bool(c.get("needs-id-document")),
     }
 
 
@@ -120,6 +194,8 @@ def search(q="", preset="", limit=300):
         if preset == "fr" and not in_country(c, "fr"):
             continue
         if preset == "custom" and not c.get("custom"):
+            continue
+        if preset == "community" and not c.get("community"):
             continue
         if q:
             hay = norm(" ".join([c["name"], c["slug"], c.get("web") or ""] + list(c.get("runs") or [])))

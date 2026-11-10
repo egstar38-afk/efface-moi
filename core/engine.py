@@ -329,6 +329,38 @@ def delete(ids):
         store.execute("DELETE FROM requests WHERE id=?", (rid,))
 
 
+# ---------- partage d'adresses avec les autres utilisateurs ----------
+
+SHARE_OUTCOME = {"done": "Suppression confirmée", "needs_action": "L'entreprise a répondu",
+                 "refused": "L'entreprise a répondu", "complaint_filed": "L'entreprise a répondu"}
+
+
+def shareable():
+    """Entreprises ajoutées à la main dont l'adresse a fait ses preuves (c'est l'utilisateur qui l'a constaté),
+    pas encore proposées et absentes des adresses déjà partagées."""
+    done = set(store.get("shared", []))
+    known = {c["email"] for c in companies._load().get("community", [])}
+    out = []
+    for c in store.get("custom_companies", []):
+        email = (c.get("email") or "").lower()
+        if not email or c["slug"] in done or email in known:
+            continue
+        r = store.one("SELECT status FROM requests WHERE slug=? AND status IN (%s) ORDER BY id DESC LIMIT 1"
+                      % ",".join("?" * len(SHARE_OUTCOME)), (c["slug"], *SHARE_OUTCOME))
+        if r:
+            outcome = SHARE_OUTCOME[r["status"]]
+            out.append({"slug": c["slug"], "name": c["name"], "email": c["email"], "web": c.get("web") or "",
+                        "outcome": outcome, "url": companies.share_url(c, outcome)})
+    return out
+
+
+def mark_shared(slug):
+    """Proposée ou écartée : on ne la suggère plus."""
+    done = store.get("shared", [])
+    if slug and slug not in done:
+        store.set("shared", done + [slug])
+
+
 def list_requests():
     cols = ("id, slug, name, email, webform, lang, status, recurring, created_at, sent_at, due_at, reminded_at, "
             "due2_at, closed_at, reply_at, reply_from, reply_subject, ack_at, error")

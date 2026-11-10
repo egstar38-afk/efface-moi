@@ -20,6 +20,7 @@ jobs:
         run: |
           python tests/test_flow.py
           python tests/test_contact.py
+          python tests/test_commu.py
         env:
           PYTHONUTF8: "1"
       - name: Fabriquer l'exe

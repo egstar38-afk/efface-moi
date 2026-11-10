@@ -1,0 +1,51 @@
+name: Proposer une adresse de contact
+description: Partager l'adresse « données personnelles » d'une entreprise absente de la base, pour tous les utilisateurs.
+title: "Adresse : "
+labels: ["adresse"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de partager ! Cette page est publique : n'indiquez **rien de personnel**, seulement les coordonnées de l'entreprise.
+        La proposition est vérifiée automatiquement, puis relue par une personne avant d'être ajoutée à la base.
+  - type: input
+    id: nom
+    attributes:
+      label: Nom de l'entreprise
+    validations:
+      required: true
+  - type: input
+    id: email
+    attributes:
+      label: Adresse e-mail de contact
+      description: Celle du délégué à la protection des données (DPO), ou à défaut du service client.
+    validations:
+      required: true
+  - type: input
+    id: site
+    attributes:
+      label: Site web de l'entreprise
+      description: Il sert à recouper l'adresse.
+      placeholder: https://www.exemple.fr
+    validations:
+      required: true
+  - type: input
+    id: formulaire
+    attributes:
+      label: Lien du formulaire de demande
+      description: Facultatif. Si l'entreprise propose aussi un formulaire pour les demandes RGPD.
+  - type: dropdown
+    id: resultat
+    attributes:
+      label: Résultat obtenu avec cette adresse
+      options:
+        - Suppression confirmée
+        - L'entreprise a répondu
+        - Pas encore de réponse
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Où avez-vous trouvé cette adresse ?
+      description: Facultatif. Lien vers la page du site où elle figure (politique de confidentialité, mentions légales).

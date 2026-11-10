@@ -1,0 +1,77 @@
+name: Adresses proposées
+
+# Une proposition arrive (formulaire « Proposer une adresse de contact ») : un rapport de vérification est posté.
+# Le mainteneur ajoute l'étiquette « acceptee » : l'adresse rejoint communaute/entreprises.json et la proposition se ferme.
+# Seules les personnes ayant les droits sur le dépôt peuvent poser une étiquette.
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions: {}
+
+jobs:
+  verifier:
+    if: github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'adresse')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Vérifier la proposition
+        run: python outils/adresse.py verifier > rapport.md
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          PYTHONUTF8: "1"
+      - name: Poster le rapport
+        run: gh issue comment "$NUMERO" --repo "$GITHUB_REPOSITORY" --body-file rapport.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMERO: ${{ github.event.issue.number }}
+
+  accepter:
+    if: github.event.action == 'labeled' && github.event.label.name == 'acceptee' && contains(github.event.issue.labels.*.name, 'adresse')
+    runs-on: ubuntu-latest
+    concurrency: adresses
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Ajouter l'adresse
+        id: ajout
+        run: |
+          if python outils/adresse.py accepter > message.md; then echo "valide=oui" >> "$GITHUB_OUTPUT"; else echo "valide=non" >> "$GITHUB_OUTPUT"; fi
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          NUMERO: ${{ github.event.issue.number }}
+          PYTHONUTF8: "1"
+      - name: Enregistrer dans le dépôt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add communaute/entreprises.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Adresse partagée acceptée (#$NUMERO)"
+            git push
+          fi
+        env:
+          NUMERO: ${{ github.event.issue.number }}
+      - name: Répondre
+        run: |
+          gh issue comment "$NUMERO" --repo "$GITHUB_REPOSITORY" --body-file message.md
+          if [ "$VALIDE" = "oui" ]; then gh issue close "$NUMERO" --repo "$GITHUB_REPOSITORY"; fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMERO: ${{ github.event.issue.number }}
+          VALIDE: ${{ steps.ajout.outputs.valide }}

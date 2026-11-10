@@ -20,6 +20,7 @@ Elle tourne sur votre ordinateur, envoie depuis votre propre boîte mail, et ne 
 | Redemander l'effacement aux courtiers tous les 6 mois | Oui |
 | Trouver qui a vos données, d'après les expéditeurs de votre boîte mail | Oui |
 | Chercher l'adresse du délégué à la protection des données sur le site d'une entreprise | Oui, quand le site se laisse lire |
+| Recevoir les adresses trouvées par les autres utilisateurs, et partager les vôtres | Oui, après relecture |
 | Lire une réponse et dire si la suppression est confirmée | Non, c'est vous |
 | Remplir un formulaire en ligne ou poster un courrier (entreprises sans e-mail) | Non, le texte est prêt à copier |
 | Déposer la plainte sur cnil.fr | Non, le texte est prêt à copier |
@@ -87,6 +88,26 @@ pouvoir se connecter au serveur en SSH avec une clé. À la main :
 puis <http://127.0.0.1:8766/>. Sur un serveur Linux, le mot de passe d'application est enregistré dans le
 dossier `data/`, réservé à votre compte mais non chiffré : n'installez Efface-moi que sur un serveur à vous.
 
+## Partager une adresse qui a marché
+
+La base est pauvre en entreprises françaises : chaque adresse trouvée par un utilisateur peut servir aux autres.
+
+Quand une entreprise que vous avez ajoutée vous-même vous a répondu, l'accueil de l'application propose
+« Partager cette adresse ». Le bouton ouvre ici une proposition pré-remplie (il faut un compte GitHub). Elle ne
+contient que le nom de l'entreprise, son site et l'adresse : rien sur vous. Vous pouvez aussi proposer une adresse
+directement depuis l'onglet [Issues](../../issues/new/choose).
+
+Aucune adresse n'est diffusée sans relecture, car une fausse adresse recevrait les demandes, donc le nom et
+l'e-mail, de tous les utilisateurs. Chaque proposition est d'abord vérifiée automatiquement (l'adresse figure-t-elle
+sur le site de l'entreprise ? est-elle sur le même domaine ?), puis acceptée ou refusée par un mainteneur.
+Les adresses acceptées sont dans [`communaute/entreprises.json`](communaute/entreprises.json) ; l'application les
+télécharge avec la base (onglet Entreprises, « Mettre à jour ») et les range sous le filtre « Adresses partagées
+par les utilisateurs ».
+
+**Pour le mainteneur :** lisez le rapport posté sous la proposition, ouvrez le site de l'entreprise en cas de
+doute, puis ajoutez l'étiquette `acceptee` pour accepter (l'adresse est enregistrée et la proposition se ferme
+toute seule), ou fermez la proposition pour refuser.
+
 ## Limites
 
 - La base d'entreprises vient de [datarequests.org](https://www.datarequests.org). Elle est surtout allemande
@@ -101,14 +122,15 @@ dossier `data/`, réservé à votre compte mais non chiffré : n'installez Effac
 - Profil, demandes et historique sont dans un dossier local : `data/` à côté du code, ou
   `%LOCALAPPDATA%\EffaceMoi` pour la version .exe. L'onglet Réglages affiche son emplacement.
 - Sous Windows, le mot de passe d'application est chiffré par Windows (DPAPI) pour votre seul compte.
-- L'application ne contacte que : votre messagerie, GitHub (base des entreprises et liste des sites pour la
-  recherche de pseudo), les sites que vous lui demandez de vérifier, et les entreprises à qui vous écrivez.
+- L'application ne contacte que : votre messagerie, GitHub (base des entreprises, adresses partagées et liste
+  des sites pour la recherche de pseudo), les sites que vous lui demandez de vérifier, et les entreprises à qui vous écrivez.
 - L'interface n'est accessible que depuis la machine où elle tourne.
 
 ## Développer
 
     python tests/test_flow.py       # cycle complet avec un faux serveur de messagerie
     python tests/test_contact.py    # recherche d'adresse sur un faux site
+    python tests/test_commu.py      # partage d'adresses entre utilisateurs
 
 Les tests n'envoient aucun e-mail et n'accèdent pas à Internet. `construire-exe.bat` fabrique
 `dist\EffaceMoi.exe` avec PyInstaller. `outils/icone.py` redessine l'icône (il lui faut Pillow). Pousser une étiquette `v1.2.3` fait fabriquer et publier l'exe par
@@ -121,6 +143,8 @@ GitHub Actions.
     core/discover.py    analyse de la boîte mail, recherche de pseudo
     core/contact.py     recherche d'adresse sur le site d'une entreprise
     core/task.py        tâche planifiée et lancement au démarrage (Windows)
+    outils/adresse.py   vérification et acceptation des adresses proposées (GitHub Actions)
+    communaute/         adresses partagées par les utilisateurs
     web/index.html      interface
     web/icone.ico       icône (dessinée par outils/icone.py)
 
