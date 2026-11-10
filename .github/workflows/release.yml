@@ -1,0 +1,32 @@
+name: Publier l'exe
+
+# Pousser une étiquette v1.2.3 fabrique EffaceMoi.exe et l'attache à une nouvelle version.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Tests
+        run: |
+          python tests/test_flow.py
+          python tests/test_contact.py
+        env:
+          PYTHONUTF8: "1"
+      - name: Fabriquer l'exe
+        run: |
+          python -m pip install --upgrade pyinstaller
+          python -m PyInstaller --noconfirm --clean --onefile --noconsole --name EffaceMoi --add-data "web;web" efface.py
+      - name: Publier
+        run: gh release create "$env:GITHUB_REF_NAME" dist/EffaceMoi.exe --title "Efface-moi $env:GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

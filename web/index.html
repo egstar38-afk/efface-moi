@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Efface-moi</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--ink:#1d1d1b;--mute:#6b6a65;--line:#dedcd5;--accent:#1f5f4a;--accent-ink:#fff;
+--warn:#8a5a00;--warn-bg:#fdf3d8;--bad:#a12a2a;--bad-bg:#fbe6e3;--ok:#1f5f4a;--ok-bg:#e2f1ea;--info-bg:#e6eef8;--info:#234e85}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--card:#20201d;--ink:#ecebe6;--mute:#a09f98;--line:#3a3935;--accent:#6fc3a3;
+--accent-ink:#10231b;--warn:#f0c66b;--warn-bg:#3a2f12;--bad:#f09a90;--bad-bg:#3d1c19;--ok:#6fc3a3;--ok-bg:#16302a;--info-bg:#1a2a40;--info:#9cc0f0}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,"Segoe UI",sans-serif}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 24px;border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:0;z-index:5}
+h1{font-size:18px;margin:0;letter-spacing:-.01em}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav button{background:none;border:0;padding:6px 9px;font-size:14px;border-radius:7px;color:var(--mute);font:inherit;cursor:pointer}
+nav button.on{background:var(--bg);color:var(--ink);font-weight:600}
+main{max-width:1080px;margin:0 auto;padding:24px 24px 110px}
+h2{font-size:17px;margin:0 0 4px}h3{font-size:15px;margin:0 0 8px}
+p{margin:0 0 10px}.mute{color:var(--mute)}.small{font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:16px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.grow{flex:1}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+label{display:block;font-size:13px;color:var(--mute);margin-bottom:3px}
+input[type=text],input[type=email],input[type=password],input[type=number],select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink);font:inherit}
+textarea{min-height:64px;resize:vertical}
+label.check{display:flex;gap:8px;align-items:flex-start;color:var(--ink);font-size:14px;margin:6px 0}
+button.btn{padding:8px 14px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;cursor:pointer}
+button.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+button.btn.danger{color:var(--bad)}button.btn:disabled{opacity:.5;cursor:default}
+button.link{background:none;border:0;color:var(--accent);padding:0;font:inherit;cursor:pointer;text-decoration:underline}
+a{color:var(--accent)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-weight:600;color:var(--mute);font-size:12.5px;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
+tr.click{cursor:pointer}tr.click:hover td{background:var(--bg)}
+.scroll{overflow-x:auto}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12.5px;white-space:nowrap;background:var(--bg);color:var(--mute)}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}.pill.info{background:var(--info-bg);color:var(--info)}
+.note{padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:14px}
+.note.warn{background:var(--warn-bg);color:var(--warn)}.note.info{background:var(--info-bg);color:var(--info)}.note.bad{background:var(--bad-bg);color:var(--bad)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.stat b{display:block;font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.steps{list-style:none;margin:0;padding:0}.steps li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);align-items:baseline}
+.steps li:last-child{border:0}.dot{width:20px;text-align:center;font-weight:700}
+pre{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;font:13px/1.5 ui-monospace,Consolas,monospace;max-height:300px;overflow:auto;margin:0 0 10px}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);width:min(760px,94vw);padding:22px;max-height:90vh}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+#jobs{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 24px;display:none}
+#jobs div.j{display:flex;gap:12px;align-items:center;font-size:14px;padding:3px 0}
+progress{flex:1;height:8px}
+#toast{position:fixed;right:20px;bottom:70px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;display:none;max-width:420px;z-index:20}
+.hide{display:none!important}
+.guide h3{margin:0 0 8px}.guide ol,.guide ul{margin:0 0 10px;padding-left:22px}.guide li{margin-bottom:6px}
+.guide .card{scroll-margin-top:80px}.toc{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px}
+code{font:13px ui-monospace,Consolas,monospace;background:var(--bg);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Efface-moi</h1>
+  <nav id="nav"></nav>
+  <span class="grow"></span>
+  <span id="mode"></span>
+  <button class="btn hide" id="quit" style="padding:5px 10px;font-size:14px" title="Arrêter l'application">Quitter</button>
+</header>
+<main id="main"></main>
+<div id="jobs"></div>
+<div id="toast"></div>
+<dialog id="dlg"></dialog>
+
+<script>
+const TOKEN = "__TOKEN__";
+const TABS = [["home","Accueil"],["requests","Demandes"],["companies","Entreprises"],["discover","Détection"],["settings","Réglages"],["guide","Guide"]];
+let S = null, tab = "home", sel = new Set(), csel = new Set(), msel = new Set(), found = null, filter = "", task = null;
+const JOB_NAMES = {update:"Mise à jour de la base", send:"Envoi des demandes", cycle:"Suivi automatique", mailscan:"Analyse de la boîte mail", userscan:"Recherche du pseudo"};
+const TONE = {draft:"",queued:"info",manual:"warn",sent:"info",reminded:"info",replied:"warn",needs_action:"warn",complaint_due:"bad",complaint_filed:"",done:"ok",refused:"bad",bounced:"bad"};
+const $ = (s, el=document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeUrl = u => /^https?:\/\//i.test(u || "") ? esc(u) : "#";
+const fdate = s => s ? new Date(s).toLocaleDateString("fr-FR") : "";
+const days = s => Math.ceil((new Date(s) - new Date()) / 864e5);
+
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.style.display="block"; clearTimeout(toast.t); toast.t=setTimeout(()=>t.style.display="none", 6000); }
+async function api(path, body){
+  const opt = {headers:{"X-Token":TOKEN}};
+  if (body !== undefined){ opt.method="POST"; opt.headers["Content-Type"]="application/json"; opt.body=JSON.stringify(body); }
+  let r, j;
+  try { r = await fetch(path, opt); j = await r.json(); }
+  catch(e){ if (!stopped) toast("L'application ne répond plus. A-t-elle été fermée ? Relancez-la."); throw e; }
+  if (!r.ok){ toast(j.error || "Erreur"); throw new Error(j.error); }
+  return body !== undefined ? j.result : j;
+}
+const pending = new Set();
+const running = () => S && (pending.size > 0 || Object.values(S.jobs).some(j => j.running));
+let prevJobs = {};
+// Lance une tâche de fond et suit sa fin, même si elle se termine avant le premier rafraîchissement.
+async function startJob(name, path, body){ await api(path, body); pending.add(name); prevJobs[name] = true; await refresh(); }
+async function refresh(light){
+  S = await api("/api/state");
+  for (const [n, j] of Object.entries(S.jobs)){
+    if (prevJobs[n] && !j.running){ pending.delete(n); jobDone(n, j); }
+    prevJobs[n] = j.running;
+  }
+  renderChrome();
+  // On ne redessine que si quelque chose a changé, pour ne pas faire sauter un clic ou une saisie en cours.
+  const sig = JSON.stringify([S.requests, S.mail, S.companies, S.last_cycle, running(), S.mail_scan?.at, S.username_scan?.at, S.profile_ready, S.sent_today]);
+  const changed = sig !== lastSig; lastSig = sig;
+  if (!light || (changed && ["home","requests","discover"].includes(tab))) render();
+}
+let lastSig = "";
+const setHtml = (el, html) => { if (el._h !== html) { el.innerHTML = html; el._h = html; } };
+function jobDone(n, j){
+  if (j.error) return toast(JOB_NAMES[n] + " : " + j.error);
+  const r = j.result || {};
+  if (n === "send") toast(S.mail.test_mode ? `Mode test : ${r.test} courrier(s) écrit(s) dans le dossier des essais, rien n'a été envoyé. Le bouton pour l'ouvrir est sur l'accueil.` : `${r.sent} demande(s) envoyée(s)` + (r.errors?`, ${r.errors} en erreur`:"") + (r.left?`. Limite du jour atteinte : ${r.left} partiront au prochain suivi.`:"."));
+  if (n === "update") { toast(`Base à jour : ${r.count} entreprises.`); found = null; tab === "companies" && render(); }
+  if (n === "cycle") toast("Suivi terminé.");
+  if (n === "mailscan" || n === "userscan") { tab === "discover" && render(); }
+}
+let stopped = false;
+$("#quit").onclick = async () => {
+  if (!confirm("Arrêter Efface-moi ? Le suivi automatique que vous avez activé dans Réglages continue de fonctionner sans elle.")) return;
+  await api("/api/quit", {}); stopped = true;
+  document.body.innerHTML = `<main style="max-width:560px;margin:80px auto;padding:0 24px"><div class="card"><h2>Efface-moi est arrêtée</h2><p class="mute" style="margin-top:8px">Vous pouvez fermer cet onglet. Pour la rouvrir, relancez l'application.</p></div></main>`;
+};
+document.addEventListener("click", e => { const b = e.target.closest("[data-open]"); if (b) api("/api/open-folder", {which: b.dataset.open}).catch(()=>{}); });
+setInterval(() => { if (stopped) return; if (S && (running() || document.visibilityState === "visible" && Date.now() - lastTick > 30000)) { lastTick = Date.now(); refresh(true).catch(()=>{}); } }, 1500);
+let lastTick = Date.now();
+
+function renderChrome(){
+  setHtml($("#nav"), TABS.map(([k,l]) => {
+    const n = k==="requests" ? (S.stats.replied||0)+(S.stats.complaint_due||0)+(S.stats.needs_action||0) : 0;
+    return `<button data-tab="${k}" class="${k===tab?"on":""}">${l}${n?` <span class="pill warn">${n}</span>`:""}</button>`;
+  }).join(""));
+  setHtml($("#mode"), S.mail.test_mode ? `<span class="pill warn" title="Aucun e-mail n'est envoyé">Mode test</span>` : `<span class="pill ok" title="« Envoyer » envoie de vrais e-mails">Envoi réel</span>`);
+  $("#quit").classList.toggle("hide", S.app.server);
+  const act = Object.entries(S.jobs).filter(([,j]) => j.running);
+  $("#jobs").style.display = act.length ? "block" : "none";
+  setHtml($("#jobs"), act.map(([n,j]) => `<div class="j"><b>${JOB_NAMES[n]||n}</b><span class="mute">${esc(j.message)}</span><progress ${j.total?`value="${j.done}" max="${j.total}"`:""}></progress></div>`).join(""));
+}
+$("#nav").addEventListener("click", e => { const b=e.target.closest("button"); if(b){ tab=b.dataset.tab; renderChrome(); render(); if(tab==="settings") loadTask(); }});
+
+async function render(){
+  await ({home:rHome, requests:rRequests, companies:rCompanies, discover:rDiscover, settings:rSettings, guide:rGuide}[tab])();
+  // Relie chaque libellé au champ qui le suit (lecteurs d'écran, clic sur le libellé).
+  document.querySelectorAll("#main label:not(.check)").forEach(l => { const f = l.nextElementSibling; if (f && f.id) l.htmlFor = f.id; });
+}
+
+/* ---------- Accueil ---------- */
+function rHome(){
+  const st = S.stats, n = k => st[k]||0, total = S.requests.length;
+  const steps = [
+    [S.profile_ready, "Renseigner votre identité", "settings"],
+    [S.mail.has_password && S.mail.smtp_host, "Connecter votre boîte mail (mot de passe d'application)", "settings"],
+    [S.companies.count > 0, "Télécharger la base des entreprises", "companies"],
+    [total > 0, "Choisir les entreprises à qui écrire", "companies"],
+    [!S.mail.test_mode, "Désactiver le mode test quand les courriers vous conviennent", "settings"],
+  ];
+  const lc = S.last_cycle;
+  $("#main").innerHTML = `
+  ${S.mail.test_mode ? `<div class="note warn"><b>Mode test activé.</b> « Envoyer » écrit les courriers dans un dossier d'essais pour que vous puissiez les relire. Aucun e-mail ne part tant que vous ne le désactivez pas dans Réglages. <button class="link" data-open="outbox">Ouvrir le dossier des essais</button></div>`:""}
+  <div class="stats">
+    <div class="stat"><b>${n("sent")+n("reminded")}</b>en attente de réponse</div>
+    <div class="stat"><b>${n("replied")+n("needs_action")}</b>réponses à traiter</div>
+    <div class="stat"><b>${n("complaint_due")}</b>plaintes CNIL à déposer</div>
+    <div class="stat"><b>${n("done")}</b>suppressions confirmées</div>
+    <div class="stat"><b>${n("draft")+n("queued")+n("manual")}</b>à envoyer</div>
+  </div>
+  <div class="card"><div class="row"><h2 class="grow">Mise en route</h2><button class="link" data-go="guide">Guide pas à pas</button></div>
+    <ul class="steps">${steps.map(([ok,l,t]) => `<li><span class="dot" style="color:var(--${ok?"ok":"mute"})">${ok?"✓":"○"}</span><span class="grow">${l}</span>${ok?"":`<button class="link" data-go="${t}">Ouvrir</button>`}</li>`).join("")}</ul>
+  </div>
+  <div class="card"><h2>Suivi automatique</h2>
+    <p class="mute">Lit les réponses dans votre boîte de réception, relance les entreprises qui n'ont pas répondu après un mois, prépare la plainte CNIL 15 jours plus tard, et redemande l'effacement aux courtiers tous les ${S.automation.repeat_months||"—"} mois.</p>
+    <div class="row"><button class="btn primary" id="cycle" ${running()?"disabled":""}>Lancer le suivi maintenant</button>
+    <span class="mute small">${lc ? "Dernier passage : "+new Date(lc.at).toLocaleString("fr-FR")+cycleSummary(lc) : "Jamais lancé."} Pour qu'il tourne seul chaque jour : Réglages → Automatisation.</span></div>
+  </div>`;
+  $("#cycle").onclick = () => startJob("cycle", "/api/cycle", {});
+  $("#main").querySelectorAll("[data-go]").forEach(b => b.onclick = () => { tab=b.dataset.go; renderChrome(); render(); if(tab==="settings") loadTask(); });
+}
+function cycleSummary(c){
+  const p=[]; if(c.replies){ p.push(`${c.replies.reply} réponse(s)`); } if(c.replies_error) p.push("lecture des réponses impossible ("+c.replies_error+")");
+  p.push(`${c.reminders||0} relance(s)`, `${c.complaints||0} plainte(s) à déposer`, `${c.renewed||0} renouvellement(s)`);
+  return " — " + esc(p.join(", ")) + ".";
+}
+
+/* ---------- Demandes ---------- */
+function deadline(r){
+  const d = r.status==="sent" ? r.due_at : r.status==="reminded" ? r.due2_at : null;
+  if (!d) return "";
+  const n = days(d); return n >= 0 ? `dans ${n} j` : `<span style="color:var(--bad)">dépassée</span>`;
+}
+function rRequests(){
+  const list = S.requests.filter(r => !filter || r.status===filter);
+  const ids = new Set(S.requests.map(r=>r.id)); sel.forEach(i => ids.has(i) || sel.delete(i));
+  const drafts = S.requests.filter(r => r.status==="draft").length;
+  const opts = Object.entries(S.status_labels).filter(([k]) => S.stats[k]).map(([k,l]) => `<option value="${k}" ${filter===k?"selected":""}>${l} (${S.stats[k]})</option>`).join("");
+  $("#main").innerHTML = `<div class="card">
+    <div class="row" style="margin-bottom:12px"><h2 class="grow">Demandes (${S.requests.length})</h2>
+      <select id="flt" style="width:auto"><option value="">Tous les statuts</option>${opts}</select>
+      <button class="btn" id="delsel" ${sel.size?"":"disabled"}>Supprimer la sélection</button>
+      <button class="btn" id="sendsel" ${sel.size?"":"disabled"}>Envoyer la sélection</button>
+      <button class="btn primary" id="sendall" ${drafts&&!running()?"":"disabled"}>Envoyer les ${drafts} brouillon(s)</button></div>
+    <p class="mute small">Envoyées aujourd'hui : ${S.sent_today} / ${S.mail.daily_cap}. Cliquez sur une ligne pour lire le courrier et agir.</p>
+    ${list.length ? `<div class="scroll"><table><thead><tr><th><input type="checkbox" id="all"></th><th>Entreprise</th><th>Statut</th><th>Envoyée</th><th>Échéance</th><th>Dernier message reçu</th></tr></thead><tbody>
+    ${list.map(r => `<tr class="click" data-id="${r.id}"><td><input type="checkbox" data-c="${r.id}" ${sel.has(r.id)?"checked":""}></td>
+      <td><b>${esc(r.name)}</b>${r.recurring?` <span class="pill" title="Renouvelée automatiquement">↻</span>`:""}<div class="mute small">${esc(r.email || (r.webform ? "formulaire en ligne" : "courrier postal"))}</div>${r.error?`<div class="small" style="color:var(--bad)">${esc(r.error)}</div>`:""}</td>
+      <td><span class="pill ${TONE[r.status]}">${esc(S.status_labels[r.status])}</span></td>
+      <td>${fdate(r.sent_at)}</td><td>${deadline(r)}</td>
+      <td class="small">${r.reply_at?`${fdate(r.reply_at)} — ${esc(r.reply_subject)}`:r.ack_at?`<span class="mute">accusé de réception le ${fdate(r.ack_at)}</span>`:""}</td></tr>`).join("")}
+    </tbody></table></div>` : `<p class="mute">Aucune demande pour l'instant. Choisissez des entreprises dans l'onglet Entreprises ou Détection.</p>`}
+  </div>`;
+  $("#flt").onchange = e => { filter=e.target.value; rRequests(); };
+  const send = async ids => { if(!ids.length) return; if(!S.mail.test_mode && !confirm(`Envoyer ${ids.length} e-mail(s) depuis ${S.mail.email} ? Cette action est définitive.`)) return; sel.clear(); await startJob("send", "/api/requests/send", {ids}); };
+  $("#sendall").onclick = () => send(S.requests.filter(r=>r.status==="draft").map(r=>r.id));
+  $("#sendsel").onclick = () => send([...sel].filter(i => S.requests.find(r=>r.id===i)?.status==="draft"));
+  $("#delsel").onclick = async () => { if(confirm(`Supprimer ${sel.size} demande(s) et leur historique ?`)){ await api("/api/requests/delete",{ids:[...sel]}); sel.clear(); refresh(); } };
+  const all = $("#all"); if (all) all.onchange = () => { list.forEach(r => all.checked ? sel.add(r.id) : sel.delete(r.id)); rRequests(); };
+  $("#main").querySelectorAll("tr.click").forEach(tr => tr.onclick = e => {
+    if (e.target.matches("input")) { const i=+e.target.dataset.c; e.target.checked?sel.add(i):sel.delete(i); $("#delsel").disabled=$("#sendsel").disabled=!sel.size; return; }
+    openRequest(+tr.dataset.id);
+  });
+}
+const EVENT = {created:"Brouillon créé", sent:"Demande envoyée", test:"Essai", error:"Erreur", reply:"Réponse reçue", ack:"Accusé de réception automatique", bounce:"Message non distribué", reminder_sent:"Relance envoyée", complaint_due:"Plainte à déposer", manual:"Action manuelle"};
+async function openRequest(id){
+  const r = await api("/api/request?id="+id), d = $("#dlg");
+  const B = (a,l,c="") => `<button class="btn ${c}" data-a="${a}">${l}</button>`;
+  const outcome = B("done","Suppression confirmée","primary") + B("needs_action","Ils demandent quelque chose") + B("refused","Ils refusent");
+  const acts = {
+    draft: B("send","Envoyer","primary") + B("delete","Supprimer","danger"),
+    queued: B("unqueue","Retirer de la file"),
+    manual: B("sent_manually","Je l'ai envoyée moi-même","primary") + B("delete","Supprimer","danger"),
+    sent: outcome + B("complaint_due","Préparer la plainte CNIL"),
+    reminded: outcome + B("complaint_due","Préparer la plainte CNIL"),
+    replied: outcome + B("waiting","Ce n'était pas une réponse"),
+    needs_action: B("waiting","J'ai répondu, j'attends","primary") + B("done","Suppression confirmée") + B("refused","Ils refusent"),
+    complaint_due: B("complaint_filed","Plainte déposée","primary") + B("done","Finalement, suppression confirmée"),
+    refused: B("complaint_filed","Plainte déposée","primary"),
+    done: B("waiting","Rouvrir"), complaint_filed: B("done","Suppression confirmée"), bounced: B("delete","Supprimer","danger"),
+  }[r.status] || "";
+  d.innerHTML = `<div class="row"><h2 class="grow">${esc(r.name)}</h2><span class="pill ${TONE[r.status]}">${esc(S.status_labels[r.status])}</span></div>
+  <p class="mute small">${r.email ? "Destinataire : "+esc(r.email) : "Pas d'adresse e-mail connue."} ${r.webform?`· <a href="${safeUrl(r.webform)}" target="_blank" rel="noopener noreferrer">Formulaire de l'entreprise</a>`:""}</p>
+  ${r.status==="manual"?`<div class="note info">${r.webform?"Aucune adresse e-mail connue pour cette entreprise : elle passe par un formulaire. Copiez le texte ci-dessous et collez-le dans son formulaire":"Aucune adresse e-mail ni formulaire connus pour cette entreprise. Envoyez le texte ci-dessous par courrier postal"}, puis indiquez-le ici pour que le délai d'un mois soit suivi.${r.address?`<br><br><b>Adresse postale :</b><div style="white-space:pre-line">${esc(r.address)}</div>`:""}</div>`:""}
+  ${r.status==="replied"?`<div class="note warn">Message de <b>${esc(r.reply_from)}</b> le ${fdate(r.reply_at)} : « ${esc(r.reply_subject)} ». Lisez-le dans votre boîte mail, puis indiquez le résultat.</div>`:""}
+  ${r.status==="bounced"?`<div class="note bad">L'adresse ${esc(r.email)} ne fonctionne pas. Cherchez l'adresse du délégué à la protection des données sur le site de l'entreprise, puis ajoutez-la dans Entreprises → Ajouter une entreprise.</div>`:""}
+  ${r.complaint?`<h3>Plainte CNIL</h3><pre id="cp">${esc(r.complaint)}</pre><div class="row" style="margin-bottom:14px"><button class="btn" data-copy="cp">Copier le texte</button><a href="https://www.cnil.fr/fr/plaintes" target="_blank" rel="noopener noreferrer">Ouvrir le formulaire de plainte de la CNIL</a></div>`:""}
+  <h3>${esc(r.subject)}</h3><pre id="bd">${esc(r.body)}</pre>
+  <div class="row" style="margin-bottom:14px"><button class="btn" data-copy="bd">Copier le texte</button></div>
+  <h3>Historique</h3><p class="small">${r.events.map(e => `${new Date(e.at).toLocaleString("fr-FR")} — ${EVENT[e.type]||esc(e.type)}${e.detail&&e.type!=="manual"?" : "+esc(e.detail):""}`).join("<br>")}</p>
+  <div class="row" style="margin-top:16px">${acts}<span class="grow"></span><button class="btn" data-a="close">Fermer</button></div>`;
+  d.onclick = async e => {
+    const c = e.target.dataset.copy; if (c){ await navigator.clipboard.writeText($("#"+c).textContent); return toast("Texte copié."); }
+    const a = e.target.dataset.a; if (!a) return;
+    if (a === "close") return d.close();
+    if (a === "send"){ if(!S.mail.test_mode && !confirm(`Envoyer cet e-mail à ${r.email} ?`)) return; d.close(); return startJob("send", "/api/requests/send", {ids:[id]}); }
+    else if (a === "delete"){ if(!confirm("Supprimer cette demande ?")) return; await api("/api/requests/delete",{ids:[id]}); }
+    else await api("/api/requests/status",{id, action:a});
+    d.close(); await refresh();
+    if (["complaint_due","refused"].includes(a)) openRequest(id);
+  };
+  d.showModal();
+}
+
+/* ---------- Entreprises ---------- */
+let cq = {q:"", preset:"brokers_fr"};
+async function rCompanies(){
+  if (S.companies.count && !found) found = await api(`/api/companies/search?preset=${encodeURIComponent(cq.preset)}&q=${encodeURIComponent(cq.q)}`);
+  const open = new Set(S.requests.filter(r => !["done","refused","complaint_filed","bounced"].includes(r.status)).map(r => r.slug));
+  const list = found ? found.companies : [];
+  $("#main").innerHTML = `<div class="card"><div class="row"><div class="grow"><h2>Base des entreprises</h2>
+    <p class="mute small">${S.companies.count ? `${S.companies.count} fiches, mises à jour le ${fdate(S.companies.updated)}.` : "Pas encore téléchargée."} Source : projet open source datarequests.org (base surtout allemande et internationale ; complétez avec vos propres entreprises ci-dessous).</p></div>
+    <button class="btn ${S.companies.count?"":"primary"}" id="upd" ${running()?"disabled":""}>${S.companies.count?"Mettre à jour":"Télécharger la base"}</button></div></div>
+  ${S.companies.count ? `<div class="card">
+    <div class="row" style="margin-bottom:12px"><select id="preset" style="width:auto;max-width:100%">
+      ${Object.entries(S.presets).map(([k,l]) => `<option value="${k}" ${cq.preset===k?"selected":""}>${esc(l)}</option>`).join("")}
+      <option value="custom" ${cq.preset==="custom"?"selected":""}>Mes entreprises ajoutées</option><option value="" ${cq.preset===""?"selected":""}>Toute la base</option></select>
+      <input type="text" id="q" placeholder="Rechercher un nom, un site…" value="${esc(cq.q)}" style="flex:1;min-width:180px"></div>
+    <div class="row" style="margin-bottom:10px"><span class="grow mute small">${found.total} résultat(s)${found.total>list.length?`, ${list.length} affichés : affinez la recherche`:""}. ${csel.size} sélectionnée(s).</span>
+      <label class="check" style="margin:0"><input type="checkbox" id="rec" checked> Redemander l'effacement automatiquement tous les ${S.automation.repeat_months||6} mois</label>
+      <button class="btn" id="selall">Tout sélectionner</button>
+      <button class="btn primary" id="mk" ${csel.size?"":"disabled"}>Préparer ${csel.size} demande(s)</button></div>
+    <div class="scroll" style="max-height:480px;overflow-y:auto"><table><thead><tr><th></th><th>Entreprise</th><th>Contact</th><th>Catégories</th></tr></thead><tbody>
+    ${list.map(c => `<tr><td><input type="checkbox" data-s="${esc(c.slug)}" ${csel.has(c.slug)?"checked":""} ${open.has(c.slug)?"disabled title='Demande déjà en cours'":""}></td>
+      <td><b>${esc(c.name)}</b>${open.has(c.slug)?` <span class="pill info">en cours</span>`:""}${c.needs_id?` <span class="pill warn" title="Cette entreprise exige une pièce d'identité">pièce d'identité</span>`:""}<div class="mute small">${esc(c.web)}</div></td>
+      <td class="small">${c.email?esc(c.email):`<span class="pill warn">${c.webform?"formulaire seulement":"courrier postal seulement"}</span>`}${c.custom?` <button class="link" data-rm="${esc(c.slug)}">retirer</button>`:""}</td>
+      <td class="small mute">${esc(c.categories.join(", "))}</td></tr>`).join("")}
+    </tbody></table></div></div>` : ""}
+  <div class="card"><h2>Ajouter une entreprise</h2>
+    <p class="mute small">Pour une entreprise absente de la base. L'adresse du délégué à la protection des données (DPO) figure dans la « politique de confidentialité » de son site.</p>
+    <div class="grid"><div><label>Nom</label><input type="text" id="cn"></div><div><label>E-mail du DPO ou du service client</label><input type="email" id="ce"></div>
+    <div><label>Site web (facultatif)</label><input type="text" id="cw"></div><div><label>Lien du formulaire (si pas d'e-mail)</label><input type="text" id="cf"></div></div>
+    <div class="row" style="margin-top:12px"><button class="btn primary" id="cadd">Ajouter</button><button class="btn" id="cfind">Chercher l'adresse sur leur site</button></div>
+    <div id="cres" class="small" style="margin-top:12px"></div></div>`;
+  $("#upd").onclick = () => startJob("update", "/api/companies/update", {});
+  const again = () => { found=null; rCompanies(); };
+  if ($("#preset")){
+    $("#preset").onchange = e => { cq.preset=e.target.value; csel.clear(); again(); };
+    let t; $("#q").oninput = e => { cq.q=e.target.value; clearTimeout(t); t=setTimeout(async()=>{ found=null; await rCompanies(); const q=$("#q"); q.focus(); q.setSelectionRange(q.value.length,q.value.length); },300); };
+    $("#selall").onclick = () => { list.forEach(c => open.has(c.slug) || csel.add(c.slug)); rCompanies(); };
+    $("#mk").onclick = async () => { const r = await api("/api/requests/create",{slugs:[...csel], recurring:$("#rec").checked}); csel.clear(); toast(`${r.created.length} demande(s) préparée(s)` + (r.skipped.length?`, ${r.skipped.length} ignorée(s)`:"") + ". Relisez-les dans l'onglet Demandes."); await refresh(); tab="requests"; renderChrome(); render(); };
+    $("#main").querySelectorAll("[data-s]").forEach(i => i.onchange = () => { i.checked?csel.add(i.dataset.s):csel.delete(i.dataset.s); $("#mk").disabled=!csel.size; $("#mk").textContent=`Préparer ${csel.size} demande(s)`; });
+    $("#main").querySelectorAll("[data-rm]").forEach(b => b.onclick = async () => { await api("/api/companies/custom/delete",{slug:b.dataset.rm}); await refresh(); again(); });
+  }
+  $("#cadd").onclick = async () => { const r = await api("/api/companies/custom",{name:$("#cn").value,email:$("#ce").value,web:$("#cw").value,webform:$("#cf").value}); csel.add(r.slug); cq={q:"",preset:"custom"}; toast("Entreprise ajoutée et sélectionnée."); await refresh(); again(); };
+  $("#cfind").onclick = findContact;
+}
+/* Cherche sur le site de l'entreprise une adresse lue par quelqu'un (DPO, juridique, contact). */
+const KIND_TONE = {privacy:"ok", legal:"info", contact:"", other:""};
+async function findContact(){
+  const web = $("#cw").value.trim() || ($("#ce").value.split("@")[1] || "").trim();
+  if (!web) return toast("Indiquez d'abord le site web de l'entreprise.");
+  $("#cres").innerHTML = `<span class="mute">Recherche d'une adresse de contact sur ${esc(web)}… (quelques secondes)</span>`;
+  $("#cfind").disabled = true;
+  let r = null;
+  try { r = await api("/api/companies/find-contact", {web}); } catch(e) {}
+  const box = $("#cres"); if (!box) return;            // l'utilisateur a changé d'onglet entre-temps
+  $("#cfind").disabled = false;
+  if (!r) return box.textContent = "";
+  if (!r.candidates.length) return box.innerHTML = `<div class="note warn" style="margin:0">${esc(r.error || `Aucune adresse trouvée sur ${r.site} (${r.pages} page(s) lue(s)).`)} Cherchez « DPO » ou « données personnelles » dans sa politique de confidentialité, puis saisissez l'adresse ci-dessus, ou collez le lien de son formulaire dans « Lien du formulaire ».
+    <div style="margin-top:6px">${r.policy?`<a href="${safeUrl(r.policy)}" target="_blank" rel="noopener noreferrer">Ouvrir leur politique de confidentialité</a> · `:""}<a href="https://${esc(r.site)}" target="_blank" rel="noopener noreferrer">Ouvrir ${esc(r.site)}</a> · <a href="https://duckduckgo.com/?q=${encodeURIComponent(`site:${r.site} DPO "données personnelles" contact`)}" target="_blank" rel="noopener noreferrer">Chercher sur le web</a></div></div>`;
+  const best = r.candidates[0], auto = best.kind !== "other";
+  if (auto) $("#ce").value = best.email;
+  box.innerHTML = `<p>${auto ? `Adresse retenue : <b>${esc(best.email)}</b>.` : "Aucune adresse ne ressemble à un contact « données personnelles »."} ${r.candidates.length} adresse(s) trouvée(s) sur ${esc(r.site)}, ${r.pages} page(s) lue(s). Vérifiez la page d'origine avant d'ajouter ; cliquez sur une autre adresse pour la choisir.</p>`
+    + r.candidates.map(c => `<div style="margin:5px 0"><button class="link" data-pick="${esc(c.email)}">${esc(c.email)}</button> <span class="pill ${KIND_TONE[c.kind]||""}">${esc(c.label)}</span>${c.same_domain?"":` <span class="pill warn">autre domaine</span>`} <a class="mute" href="${safeUrl(c.source)}" target="_blank" rel="noopener noreferrer">voir la page</a></div>`).join("");
+  box.querySelectorAll("[data-pick]").forEach(b => b.onclick = () => { $("#ce").value = b.dataset.pick; $("#ce").focus(); });
+}
+
+/* ---------- Détection ---------- */
+function rDiscover(){
+  const ms = S.mail_scan, us = S.username_scan, busy = running();
+  const open = new Set(S.requests.map(r => r.slug));
+  const known = ms ? ms.senders.filter(s => s.slug) : [], unknown = ms ? ms.senders.filter(s => !s.slug).slice(0,150) : [];
+  $("#main").innerHTML = `<div class="card"><h2>Qui a vos données ? Analyse de votre boîte mail</h2>
+    <p class="mute">Lit uniquement l'expéditeur et la date de vos derniers messages (jamais leur contenu), compte qui vous écrit, et repère les entreprises connues de la base. Tout reste sur cet ordinateur.</p>
+    <div class="row"><select id="lim" style="width:auto"><option value="1000">1 000 derniers messages</option><option value="3000" selected>3 000 derniers messages</option><option value="10000">10 000 derniers messages</option></select>
+    <button class="btn primary" id="ms" ${busy||!S.mail.imap_ready?"disabled":""}>Analyser ma boîte de réception</button>
+    ${S.mail.imap_ready?"":`<span class="mute small">Connectez d'abord votre messagerie dans Réglages.</span>`}</div>
+    ${ms ? `<p class="mute small" style="margin-top:14px">Analyse du ${fdate(ms.at)} : ${ms.messages} messages, ${ms.senders.length} expéditeurs distincts.</p>
+    ${known.length?`<div class="row"><h3 class="grow">Entreprises reconnues (${known.length})</h3><button class="btn primary" id="mk2" ${msel.size?"":"disabled"}>Préparer ${msel.size} demande(s)</button></div>
+    <div class="scroll" style="max-height:340px;overflow-y:auto"><table><thead><tr><th></th><th>Entreprise</th><th>Expéditeur</th><th>Messages</th><th>Dernier</th></tr></thead><tbody>
+    ${known.map(s => `<tr><td><input type="checkbox" data-m="${esc(s.slug)}" ${msel.has(s.slug)?"checked":""} ${open.has(s.slug)?"disabled":""}></td><td><b>${esc(s.company)}</b>${open.has(s.slug)?` <span class="pill info">demande existante</span>`:""}${s.email?"":` <span class="pill warn">pas d'e-mail</span>`}</td><td class="small mute">${esc(s.domain)}</td><td>${s.count}</td><td class="small">${fdate(s.last)}</td></tr>`).join("")}</tbody></table></div>`:`<p>Aucun expéditeur ne correspond à une fiche de la base.</p>`}
+    <h3 style="margin-top:18px">Autres expéditeurs (${unknown.length})</h3><p class="mute small">Absents de la base. « Ajouter » pré-remplit le formulaire d'ajout avec le nom, le site et l'adresse qui vous a écrit. Une adresse marquée « automatique » (no-reply, newsletter…) n'est en général lue par personne : dans ce cas, l'application cherche d'elle-même une meilleure adresse sur le site de l'entreprise.</p>
+    <div class="scroll" style="max-height:340px;overflow-y:auto"><table><thead><tr><th>Expéditeur</th><th>Domaine</th><th>Messages</th><th>Dernier</th><th></th></tr></thead><tbody>
+    ${unknown.map(s => `<tr><td>${esc(s.sender)}${s.marketing?` <span class="pill">newsletter</span>`:""}${s.address?`<div class="mute small">${esc(s.address)}${s.no_reply?` <span class="pill warn">automatique</span>`:""}</div>`:""}</td><td class="small mute">${esc(s.domain)}</td><td>${s.count}</td><td class="small">${fdate(s.last)}</td><td><button class="link" data-add="${esc(s.sender||s.domain)}" data-dom="${esc(s.domain)}" data-mail="${esc(s.address||"")}" data-nr="${s.no_reply?1:""}">Ajouter</button></td></tr>`).join("")}</tbody></table></div>`:""}
+  </div>
+  <div class="card"><h2>Où apparaît votre pseudo ?</h2>
+    <p class="mute">Vérifie si un compte public porte ce pseudo sur plusieurs centaines de sites (liste du projet open source Sherlock). Il peut y avoir des faux positifs, et un compte trouvé peut appartenir à un homonyme.</p>
+    <div class="row"><input type="text" id="un" placeholder="votre pseudo" value="${esc(us?us.username:"")}" style="max-width:260px"><button class="btn primary" id="us" ${busy?"disabled":""}>Chercher</button></div>
+    ${us ? `<p class="mute small" style="margin-top:14px">« ${esc(us.username)} », le ${fdate(us.at)} : ${us.found.length} compte(s) possible(s) sur ${us.checked} sites ; ${us.unknown} sites n'ont pas pu être vérifiés.</p>
+    <p>${us.found.map(f => `<a href="${safeUrl(f.url)}" target="_blank" rel="noopener noreferrer">${esc(f.site)}</a>`).join(" · ")}</p>
+    ${us.found.length?`<p class="mute small">Pour chaque compte qui est bien le vôtre : connectez-vous et supprimez-le depuis ses paramètres. Si vous n'y avez plus accès, ajoutez le site dans Entreprises et envoyez-lui une demande d'effacement.</p>`:""}`:""}
+  </div>
+  <div class="card"><h2>Fuites de données</h2><p class="mute">Pour savoir si votre adresse figure dans une fuite connue, utilisez <a href="https://haveibeenpwned.com/" target="_blank" rel="noopener noreferrer">haveibeenpwned.com</a> : la recherche manuelle y est gratuite (l'accès automatisé est payant, il n'est donc pas intégré ici).</p></div>`;
+  $("#ms").onclick = () => startJob("mailscan", "/api/scan/mail", {limit:+$("#lim").value});
+  $("#us").onclick = () => startJob("userscan", "/api/scan/username", {username:$("#un").value});
+  $("#main").querySelectorAll("[data-m]").forEach(i => i.onchange = () => { i.checked?msel.add(i.dataset.m):msel.delete(i.dataset.m); $("#mk2").disabled=!msel.size; $("#mk2").textContent=`Préparer ${msel.size} demande(s)`; });
+  if ($("#mk2")) $("#mk2").onclick = async () => { const r = await api("/api/requests/create",{slugs:[...msel], recurring:false}); msel.clear(); toast(`${r.created.length} demande(s) préparée(s). Relisez-les dans l'onglet Demandes.`); await refresh(); tab="requests"; renderChrome(); render(); };
+  $("#main").querySelectorAll("[data-add]").forEach(b => b.onclick = async () => { tab="companies"; renderChrome(); await rCompanies(); $("#cn").value=b.dataset.add; $("#cw").value="https://"+b.dataset.dom; $("#ce").value=b.dataset.mail; $("#ce").focus(); $("#ce").select(); $("#ce").scrollIntoView({block:"center"});
+    // Adresse automatique ou inconnue : on cherche tout de suite une meilleure adresse sur leur site.
+    if (!b.dataset.mail || b.dataset.nr) { toast("Adresse d'envoi automatique : recherche d'une meilleure adresse sur leur site…"); findContact(); } });
+}
+
+/* ---------- Réglages ---------- */
+async function loadTask(){ try { task = await api("/api/task"); if (tab==="settings") rTask(); } catch(e){} }
+function rTask(){
+  const el = $("#task"); if (!el) return;
+  if (S.app.server) return el.innerHTML = `<span class="pill ok">Sur serveur</span> <span class="mute small">Le suivi est lancé chaque jour par le serveur lui-même, même quand votre ordinateur est éteint. Rien à activer ici.</span>`;
+  if (!task) return el.innerHTML = `<span class="mute">Vérification…</span>`;
+  if (!task.supported) return el.innerHTML = `<span class="mute">Planification intégrée disponible sous Windows uniquement. Ailleurs, lancez <code>python efface.py auto</code> une fois par jour (cron) : voir le dossier <code>serveur</code>.</span>`;
+  const su = task.startup || {};
+  el.innerHTML = `<div class="row" style="width:100%">` + (task.enabled
+    ? `<span class="pill ${task.here?"ok":"bad"}">${task.here?"Suivi quotidien activé : chaque jour à 9 h":"Suivi quotidien activé, mais pour un autre emplacement"}</span> ${task.here?"":`<button class="btn primary" id="ton">Réactiver ici</button>`} <button class="btn" id="toff">Désactiver</button>`
+    : `<button class="btn primary" id="ton">Activer le suivi quotidien (9 h)</button> <span class="mute small">Crée une tâche planifiée Windows. L'ordinateur doit être allumé à cette heure-là.</span>`) + `</div>
+    <label class="check" style="width:100%"><input type="checkbox" id="su" ${su.enabled&&su.here?"checked":""}> <span><b>Faire aussi le suivi à chaque démarrage de l'ordinateur.</b> À cocher si le PC n'est pas toujours allumé à 9 h. Le suivi tourne en arrière-plan, sans fenêtre, deux minutes après l'ouverture de votre session.${su.enabled&&!su.here?` <span class="pill bad">activé pour un autre emplacement : cochez pour corriger</span>`:""}</span></label>`;
+  if ($("#ton")) $("#ton").onclick = async () => { task = await api("/api/task/enable",{}); rTask(); toast("Suivi quotidien activé."); };
+  if ($("#toff")) $("#toff").onclick = async () => { task = await api("/api/task/disable",{}); rTask(); };
+  $("#su").onchange = async e => { const on = e.target.checked; try { task = await api(on ? "/api/startup/enable" : "/api/startup/disable", {}); toast(on ? "Suivi au démarrage activé." : "Suivi au démarrage désactivé."); } finally { rTask(); } };
+}
+function rSettings(){
+  const p = S.profile, m = S.mail, a = S.automation, v = k => esc(p[k]||"");
+  $("#main").innerHTML = `<div class="card"><h2>Votre identité</h2>
+    <p class="mute small">Ces informations figurent dans les courriers pour que l'entreprise retrouve vos données. Seuls le nom et les e-mails sont transmis par défaut.</p>
+    <div class="grid"><div><label>Prénom et nom</label><input type="text" id="pn" value="${v("name")}"></div>
+      <div><label>E-mail principal</label><input type="email" id="pe" value="${v("email")}"></div>
+      <div><label>Autres e-mails à faire effacer (séparés par des virgules)</label><input type="text" id="po" value="${esc((p.other_emails||[]).join(", "))}"></div>
+      <div><label>Téléphone (facultatif)</label><input type="text" id="pp" value="${v("phone")}"></div>
+      <div><label>Date de naissance (facultatif)</label><input type="text" id="pb" placeholder="JJ/MM/AAAA" value="${v("birthdate")}"></div>
+      <div><label>Adresse postale (facultatif)</label><textarea id="pa">${v("address")}</textarea></div></div>
+    <label class="check"><input type="checkbox" id="ia" ${p.include_address?"checked":""}> Toujours indiquer mon adresse postale (sinon : seulement aux entreprises qui l'exigent)</label>
+    <label class="check"><input type="checkbox" id="ib" ${p.include_birthdate?"checked":""}> Toujours indiquer ma date de naissance</label>
+    <label class="check"><input type="checkbox" id="ip" ${p.include_phone?"checked":""}> Indiquer mon téléphone (utile pour les fichiers de démarchage téléphonique)</label>
+    <div class="row" style="margin-top:10px"><button class="btn primary" id="psave">Enregistrer</button><span class="mute small">Les brouillons déjà préparés gardent l'ancien texte : supprimez-les et recréez-les si vous changez d'identité.</span></div></div>
+
+  <div class="card"><h2>Votre messagerie</h2>
+    <p class="mute small">Les demandes partent de votre propre adresse, et les réponses y arrivent. Utilisez un <b>mot de passe d'application</b>, pas votre mot de passe habituel. Pour Gmail : activez la validation en deux étapes, puis créez-en un sur <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer">myaccount.google.com/apppasswords</a>. ${S.app.windows && !S.app.server ? "Il est chiffré par Windows sur cet ordinateur et n'est jamais affiché." : "Il est enregistré sur la machine qui fait tourner l'application, dans un dossier réservé à votre compte, et n'est jamais affiché."}</p>
+    <div class="grid"><div><label>Adresse e-mail</label><input type="email" id="me" value="${esc(m.email)}"></div>
+      <div><label>Mot de passe d'application ${m.has_password?"(enregistré ; laisser vide pour le garder)":""}</label><input type="password" id="mp" autocomplete="new-password" placeholder="${m.has_password?"••••••••":""}"></div></div>
+    <details style="margin:12px 0" ${m.email&&!m.smtp_host?"open":""}><summary class="mute small" style="cursor:pointer">Serveurs (remplis automatiquement pour Gmail, Yahoo, Orange, Free, La Poste, SFR, iCloud, GMX)</summary>
+      <div class="grid" style="margin-top:10px"><div><label>Serveur d'envoi (SMTP)</label><input type="text" id="sh" value="${esc(m.smtp_host)}"></div>
+      <div><label>Port SMTP</label><input type="number" id="sp" value="${m.smtp_port}"></div>
+      <div><label>Sécurité</label><select id="ss"><option value="ssl" ${m.smtp_security==="ssl"?"selected":""}>SSL (port 465)</option><option value="starttls" ${m.smtp_security==="starttls"?"selected":""}>STARTTLS (port 587)</option></select></div>
+      <div><label>Serveur de réception (IMAP)</label><input type="text" id="ih" value="${esc(m.imap_host)}"></div>
+      <div><label>Port IMAP</label><input type="number" id="ipt" value="${m.imap_port}"></div>
+      <div><label>Identifiant (si différent de l'adresse)</label><input type="text" id="mu" value="${esc(m.username)}"></div></div></details>
+    <div class="grid"><div><label>Nombre maximum d'e-mails par jour</label><input type="number" id="cap" min="1" max="200" value="${m.daily_cap}"></div>
+      <div><label>Pause entre deux envois (secondes)</label><input type="number" id="dl" min="0" max="600" value="${m.delay_seconds}"></div></div>
+    <label class="check" style="margin-top:12px"><input type="checkbox" id="tm" ${m.test_mode?"checked":""}> <span><b>Mode test</b> : ne rien envoyer, écrire les courriers dans le dossier des essais pour relecture</span></label>
+    <div class="row" style="margin-top:10px"><button class="btn primary" id="msave">Enregistrer</button><button class="btn" id="mtest">Tester la connexion</button>${m.has_password?`<button class="btn danger" id="mforget">Oublier le mot de passe</button>`:""}<span id="mres" class="small"></span></div></div>
+
+  <div class="card"><h2>Automatisation</h2>
+    <label class="check"><input type="checkbox" id="ar" ${a.auto_remind?"checked":""}> Relancer automatiquement par e-mail les entreprises qui n'ont pas répondu après un mois</label>
+    <div class="row" style="margin:8px 0 14px"><span>Redemander l'effacement aux courtiers tous les</span><input type="number" id="rm" min="0" max="24" value="${a.repeat_months}" style="width:80px"><span>mois (0 = jamais)</span><button class="btn" id="asave">Enregistrer</button></div>
+    <div id="task" class="row"></div></div>
+  <p class="mute small">Efface-moi ${esc(S.app.version)}${S.app.exe?" (version .exe)":""}. Vos données sont dans <code>${esc(S.app.data)}</code>. ${S.app.windows&&!S.app.server?`<button class="link" data-open="data">Ouvrir ce dossier</button>`:""}</p>`;
+  rTask();
+  $("#psave").onclick = async () => { await api("/api/profile",{name:$("#pn").value,email:$("#pe").value,other_emails:$("#po").value.split(","),phone:$("#pp").value,birthdate:$("#pb").value,address:$("#pa").value,include_address:$("#ia").checked,include_birthdate:$("#ib").checked,include_phone:$("#ip").checked}); toast("Identité enregistrée."); await refresh(); };
+  const saveMail = async () => { await api("/api/mail",{email:$("#me").value,password:$("#mp").value,smtp_host:$("#sh").value.trim(),smtp_port:$("#sp").value,smtp_security:$("#ss").value,imap_host:$("#ih").value.trim(),imap_port:$("#ipt").value,username:$("#mu").value.trim(),daily_cap:$("#cap").value,delay_seconds:$("#dl").value,test_mode:$("#tm").checked}); await refresh(); };
+  $("#msave").onclick = async () => { if(!$("#tm").checked && m.test_mode && !confirm("Désactiver le mode test ? « Envoyer » enverra alors de vrais e-mails depuis votre adresse.")) return; await saveMail(); toast("Messagerie enregistrée."); };
+  $("#mtest").onclick = async () => { await saveMail(); $("#mres").textContent="Test en cours…"; const r = await api("/api/mail/test",{}); $("#mres").innerHTML = `Envoi : ${r.smtp==="ok"?"<b style='color:var(--ok)'>OK</b>":esc(r.smtp)} · Réception : ${r.imap==="ok"?"<b style='color:var(--ok)'>OK</b>":esc(r.imap)}`; };
+  if ($("#mforget")) $("#mforget").onclick = async () => { await api("/api/mail",{forget_password:true}); toast("Mot de passe effacé."); await refresh(); };
+  $("#asave").onclick = async () => { await api("/api/automation",{auto_remind:$("#ar").checked,repeat_months:$("#rm").value}); toast("Automatisation enregistrée."); await refresh(); };
+  $("#ar").onchange = $("#asave").onclick;
+}
+
+/* ---------- Guide ---------- */
+function rGuide(){
+  const go = (t, l) => `<button class="link" data-go="${t}">${l}</button>`;
+  const ext = (u, l) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${l}</a>`;
+  const steps = [
+    ["lancer", "1. Lancer l'application", `
+      <ul><li><b>Version .exe :</b> double-cliquez sur <code>EffaceMoi.exe</code>. Au premier lancement, Windows peut afficher « Windows a protégé votre ordinateur » parce que le programme n'est pas signé : cliquez sur « Informations complémentaires », puis « Exécuter quand même ».</li>
+      <li><b>Version Python :</b> double-cliquez sur <code>EFFACEMOI.bat</code> (il faut Python 3.10 ou plus récent).</li></ul>
+      <p>L'application s'ouvre dans votre navigateur, mais tout se passe sur votre ordinateur : cette page n'est pas un site web. Le bouton « Quitter », en haut à droite, l'arrête. La relancer alors qu'elle tourne déjà rouvre simplement cette page.</p>`],
+    ["identite", "2. Renseigner votre identité", `
+      <p>Dans ${go("settings","Réglages")} → « Votre identité » : votre nom et votre e-mail principal. Ajoutez vos autres adresses dans « Autres e-mails à faire effacer ».</p>
+      <p>Les courriers ne donnent que votre nom et vos e-mails. L'adresse postale n'est ajoutée que pour les entreprises qui l'exigent, sauf si vous cochez « Toujours indiquer ».</p>`],
+    ["messagerie", "3. Connecter votre boîte mail", `
+      <p>Les demandes partent de votre propre adresse et les réponses y arrivent. L'application a besoin d'un <b>mot de passe d'application</b> : un code de 16 lettres, distinct de votre mot de passe habituel, qui n'ouvre que la messagerie et que vous pouvez supprimer à tout moment.</p>
+      <p><b>Avec Gmail :</b></p>
+      <ol><li>Sur ${ext("https://myaccount.google.com/security","myaccount.google.com/security")}, la ligne « Validation en deux étapes » doit afficher « Activée ». Sinon, activez-la : c'est obligatoire.</li>
+      <li>Ouvrez ${ext("https://myaccount.google.com/apppasswords","myaccount.google.com/apppasswords")}, donnez un nom (« Efface-moi »), cliquez sur « Créer ».</li>
+      <li>Copiez le code de 16 lettres : il ne sera plus affiché.</li>
+      <li>Dans ${go("settings","Réglages")} → « Votre messagerie », saisissez votre adresse Gmail, collez le code, puis cliquez sur « Tester la connexion ». Vous devez voir « Envoi : OK · Réception : OK ». Ce test n'envoie rien.</li></ol>
+      <p><b>Yahoo, Orange, Free, La Poste, SFR, iCloud, GMX :</b> même principe, les serveurs sont remplis automatiquement. Le mot de passe d'application se crée dans les réglages de sécurité de votre compte.</p>
+      <p><b>Hotmail, Outlook.com, Live :</b> Microsoft refuse cette méthode pour les comptes personnels. Connectez une adresse Gmail ici, et mettez l'adresse Hotmail dans « Autres e-mails à faire effacer » : les courriers demanderont l'effacement pour les deux.</p>
+      <p>Si la page de Google répond « Le paramètre que vous recherchez n'est pas disponible » : vérifiez que vous êtes sur le bon compte (photo en haut à droite) et que la validation en deux étapes est bien « Activée ».</p>`],
+    ["essai", "4. Faire un essai sans rien envoyer", `
+      <p>L'application démarre en <b>mode test</b> (étiquette en haut à droite). Dans ce mode, « Envoyer » écrit les courriers dans un dossier d'essais au lieu de les envoyer : ouvrez-les pour les relire. ${S.app.windows&&!S.app.server?`<button class="link" data-open="outbox">Ouvrir le dossier des essais</button>`:""}</p>
+      <p>Quand le texte vous convient, décochez « Mode test » dans ${go("settings","Réglages")} → « Votre messagerie ». À partir de là, « Envoyer » envoie de vrais e-mails.</p>`],
+    ["entreprises", "5. Choisir les entreprises", `
+      <p>Dans ${go("companies","Entreprises")} :</p>
+      <ol><li>Téléchargez la base (une seule fois, puis « Mettre à jour » de temps en temps).</li>
+      <li>Gardez le filtre « Courtiers en données, publicité… — France », ou cherchez un nom.</li>
+      <li>Cochez les entreprises, puis « Préparer les demandes ». Rien n'est envoyé à cette étape.</li></ol>
+      <p><b>Entreprise absente de la base :</b> utilisez « Ajouter une entreprise » en bas de la page. Le bouton « Chercher l'adresse sur leur site » lit leur politique de confidentialité et propose l'adresse de leur délégué à la protection des données (DPO). Vérifiez toujours l'adresse proposée avec le lien « voir la page ».</p>
+      <p>La base vient du projet libre datarequests.org. Elle est surtout allemande et internationale : les entreprises françaises y sont peu nombreuses, d'où l'intérêt de l'étape suivante.</p>`],
+    ["detection", "6. Trouver qui a vos données", `
+      <p>Dans ${go("discover","Détection")} :</p>
+      <ul><li><b>Analyse de la boîte mail :</b> compte qui vous écrit (expéditeur et date seulement, jamais le contenu). Les entreprises connues de la base se cochent directement. Pour les autres, « Ajouter » pré-remplit le formulaire ; si l'expéditeur n'utilise qu'une adresse automatique (no-reply, newsletter), l'application cherche d'elle-même une meilleure adresse sur son site.</li>
+      <li><b>Recherche de pseudo :</b> vérifie plusieurs centaines de sites. Pour un compte qui est bien le vôtre, le plus rapide est de le supprimer depuis ses paramètres.</li></ul>`],
+    ["envoyer", "7. Relire et envoyer", `
+      <p>Dans ${go("requests","Demandes")}, cliquez sur une ligne pour lire le courrier. Puis « Envoyer la sélection » ou « Envoyer les brouillons ».</p>
+      <ul><li>Les envois sont limités à 40 par jour, avec une pause entre deux, pour que votre adresse ne soit pas prise pour du spam. Le reste part au suivi suivant.</li>
+      <li>Les entreprises sans e-mail apparaissent « À envoyer vous-même » : copiez le texte dans leur formulaire (ou par courrier), puis cliquez sur « Je l'ai envoyée moi-même » pour que le délai soit suivi.</li></ul>`],
+    ["reponses", "8. Suivre les réponses", `
+      <p>L'entreprise a <b>un mois</b> pour répondre. L'application lit votre boîte de réception et met chaque demande à jour. Votre seule tâche : lire les réponses et dire ce qu'elles contiennent.</p>
+      <div class="scroll"><table><thead><tr><th>Statut</th><th>Ce que ça veut dire</th><th>Ce que vous faites</th></tr></thead><tbody>
+      <tr><td><span class="pill info">Envoyée, en attente</span></td><td>Le délai d'un mois court. Un accusé de réception automatique ne l'arrête pas.</td><td>Rien.</td></tr>
+      <tr><td><span class="pill warn">Réponse reçue, à lire</span></td><td>Un message de l'entreprise est arrivé.</td><td>Lisez-le dans votre boîte mail, puis cliquez sur « Suppression confirmée », « Ils demandent quelque chose » ou « Ils refusent ». Si ce n'était qu'une publicité : « Ce n'était pas une réponse ».</td></tr>
+      <tr><td><span class="pill warn">Ils demandent quelque chose</span></td><td>Souvent une confirmation depuis l'adresse concernée, parfois une pièce d'identité.</td><td>Répondez-leur depuis votre messagerie, puis « J'ai répondu, j'attends ». Une pièce d'identité ne peut être exigée qu'en cas de doute sérieux sur votre identité.</td></tr>
+      <tr><td><span class="pill info">Relancée, en attente</span></td><td>Pas de réponse après un mois : une relance est partie toute seule. Ils ont 15 jours.</td><td>Rien.</td></tr>
+      <tr><td><span class="pill bad">Plainte CNIL à déposer</span></td><td>Toujours rien après la relance.</td><td>Voir l'étape 9.</td></tr>
+      <tr><td><span class="pill bad">Adresse invalide</span></td><td>Le message n'a pas été distribué.</td><td>Ajoutez l'entreprise avec la bonne adresse (étape 5).</td></tr>
+      <tr><td><span class="pill ok">Suppression confirmée</span></td><td>Terminé. Pour les courtiers, la demande est renouvelée automatiquement tous les 6 mois.</td><td>Rien.</td></tr>
+      </tbody></table></div>`],
+    ["cnil", "9. Déposer une plainte à la CNIL", `
+      <p>Quand une demande passe à « Plainte CNIL à déposer » (ou si l'entreprise refuse sans raison valable), ouvrez-la : le texte de la plainte est prêt.</p>
+      <ol><li>Cliquez sur « Copier le texte ».</li><li>Ouvrez ${ext("https://www.cnil.fr/fr/plaintes","cnil.fr/fr/plaintes")} et suivez le formulaire.</li>
+      <li>Joignez une copie de votre demande et de la relance (elles sont dans le dossier « Messages envoyés » de votre messagerie).</li>
+      <li>Revenez cliquer sur « Plainte déposée ».</li></ol><p>C'est gratuit. La CNIL ne peut être saisie qu'une fois le délai d'un mois écoulé.</p>`],
+    ["auto", "10. Laisser tourner tout seul", `
+      <p>Le <b>suivi</b> lit les réponses, envoie les relances, prépare les plaintes et renouvelle les demandes. Trois façons de le faire tourner sans y penser, dans ${go("settings","Réglages")} → « Automatisation » :</p>
+      <ul><li><b>Suivi quotidien :</b> une tâche Windows le lance chaque jour à 9 h, si l'ordinateur est allumé.</li>
+      <li><b>Au démarrage de l'ordinateur :</b> à cocher si le PC n'est pas toujours allumé à 9 h. Le suivi se fait en arrière-plan à chaque ouverture de session.</li>
+      <li><b>Sur un serveur</b> (mini-PC, NAS, Raspberry Pi allumé en permanence) : le suivi part chaque jour même PC éteint. Voir le dossier <code>serveur</code> du projet.</li></ul>
+      <p>Vous pouvez aussi cliquer sur « Lancer le suivi maintenant » sur ${go("home","l'accueil")}. Fermer ou quitter l'application n'arrête pas le suivi automatique.</p>`],
+    ["faq", "Questions fréquentes", `
+      <p><b>Où sont mes données ?</b> Uniquement sur ${S.app.server?"votre serveur":"cet ordinateur"}, dans <code>${esc(S.app.data)}</code>. Rien n'est envoyé ailleurs qu'aux entreprises à qui vous écrivez et à votre propre messagerie.</p>
+      <p><b>Est-ce légal ?</b> Oui : c'est l'exercice de votre droit à l'effacement (article 17 du RGPD) et d'opposition (article 21). C'est gratuit et l'entreprise doit répondre sous un mois.</p>
+      <p><b>Une entreprise peut-elle refuser ?</b> Oui, dans certains cas : obligation légale de conserver (factures, banque), contrat en cours. Elle doit alors vous dire pourquoi.</p>
+      <p><b>Pourquoi recommencer tous les 6 mois ?</b> Les courtiers en données rachètent régulièrement des fichiers : vos données peuvent réapparaître.</p>
+      <p><b>Comment tout arrêter ?</b> Désactivez le suivi quotidien et le suivi au démarrage dans Réglages, cliquez sur « Quitter », supprimez le mot de passe d'application sur le site de votre messagerie, puis supprimez le dossier de données ci-dessus.</p>`],
+  ];
+  $("#main").innerHTML = `<div class="guide">
+    <div class="card"><h2>Guide pas à pas</h2>
+      <p class="mute">Efface-moi écrit aux entreprises pour qu'elles suppriment vos données personnelles, suit les délais légaux, relance et prépare la plainte à la CNIL. Comptez un quart d'heure pour la mise en route ; ensuite, il reste seulement à lire les réponses.</p>
+      <div class="toc">${steps.map(([id, t]) => `<a href="#g-${id}">${t}</a>`).join("")}</div></div>
+    ${steps.map(([id, t, html]) => `<div class="card" id="g-${id}"><h3>${t}</h3>${html}</div>`).join("")}
+  </div>`;
+  $("#main").querySelectorAll("[data-go]").forEach(b => b.onclick = () => { tab=b.dataset.go; renderChrome(); render(); if(tab==="settings") loadTask(); window.scrollTo(0,0); });
+  $("#main").querySelectorAll(".toc a").forEach(a => a.onclick = e => { e.preventDefault(); document.getElementById(a.getAttribute("href").slice(1)).scrollIntoView({behavior:"smooth"}); });
+}
+
+refresh().catch(() => { $("#main").innerHTML = `<div class="note bad">Impossible de joindre l'application. Relancez Efface-moi.</div>`; });
+</script>
+</body>
+</html>
