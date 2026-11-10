@@ -21,6 +21,7 @@ from core import companies, contact, discover, engine, mailer, store, task
 
 TOKEN = secrets.token_urlsafe(24)
 WEB = store.ROOT / "web" / "index.html"
+ICON = store.ROOT / "web" / "icone.ico"
 INSTANCE = store.DATA_DIR / "server.json"                 # port de l'instance en cours, pour n'en lancer qu'une
 SERVER_MODE = bool(os.environ.get("EFFACE_SERVER"))       # tourne sur un serveur, consultée à distance
 SERVER = None
@@ -159,6 +160,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(403, {"error": "Interdit"})
             html = WEB.read_text(encoding="utf-8").replace("__TOKEN__", TOKEN)
             return self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
+        if url.path == "/favicon.ico" and ICON.exists():
+            return self._send(200, ICON.read_bytes(), "image/x-icon")
         if not url.path.startswith("/api/"):
             return self._send(404, {"error": "Introuvable"})
         if url.path == "/api/ping":     # sert seulement à reconnaître une instance déjà lancée

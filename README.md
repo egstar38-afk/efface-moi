@@ -1,3 +1,5 @@
+<img src="web/icone.png" width="96" align="right" alt="Icône d'Efface-moi : une gomme">
+
 # Efface-moi
 
 Faites supprimer vos données personnelles chez les courtiers en données et les entreprises, sans abonnement.
@@ -109,7 +111,7 @@ dossier `data/`, réservé à votre compte mais non chiffré : n'installez Effac
     python tests/test_contact.py    # recherche d'adresse sur un faux site
 
 Les tests n'envoient aucun e-mail et n'accèdent pas à Internet. `construire-exe.bat` fabrique
-`dist\EffaceMoi.exe` avec PyInstaller. Pousser une étiquette `v1.2.3` fait fabriquer et publier l'exe par
+`dist\EffaceMoi.exe` avec PyInstaller. `outils/icone.py` redessine l'icône (il lui faut Pillow). Pousser une étiquette `v1.2.3` fait fabriquer et publier l'exe par
 GitHub Actions.
 
     core/companies.py   base des entreprises, recherche
@@ -120,6 +122,7 @@ GitHub Actions.
     core/contact.py     recherche d'adresse sur le site d'une entreprise
     core/task.py        tâche planifiée et lancement au démarrage (Windows)
     web/index.html      interface
+    web/icone.ico       icône (dessinée par outils/icone.py)
 
 ## Crédits et licence
 

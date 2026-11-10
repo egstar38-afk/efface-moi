@@ -25,7 +25,7 @@ jobs:
       - name: Fabriquer l'exe
         run: |
           python -m pip install --upgrade pyinstaller
-          python -m PyInstaller --noconfirm --clean --onefile --noconsole --name EffaceMoi --add-data "web;web" efface.py
+          python -m PyInstaller --noconfirm --clean --onefile --noconsole --name EffaceMoi --icon web/icone.ico --add-data "web;web" efface.py
       - name: Publier
         run: gh release create "$env:GITHUB_REF_NAME" dist/EffaceMoi.exe --title "Efface-moi $env:GITHUB_REF_NAME" --generate-notes
         env:
