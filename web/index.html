@@ -78,7 +78,7 @@ code{font:13px ui-monospace,Consolas,monospace;background:var(--bg);padding:1px 
 const TOKEN = "__TOKEN__";
 const TABS = [["home","Accueil"],["requests","Demandes"],["companies","Entreprises"],["discover","Détection"],["footprint","Empreinte"],["settings","Réglages"],["guide","Guide"]];
 let S = null, tab = "home", sel = new Set(), csel = new Set(), msel = new Set(), found = null, filter = "", task = null;
-const JOB_NAMES = {update:"Mise à jour de la base", send:"Envoi des demandes", cycle:"Suivi automatique", mailscan:"Analyse de la boîte mail", userscan:"Recherche du pseudo", footprint:"Recherche de vos traces", recheck:"Contrôle des pages"};
+const JOB_NAMES = {update:"Mise à jour de la base", send:"Envoi des demandes", cycle:"Suivi automatique", mailscan:"Analyse de la boîte mail", userscan:"Recherche du pseudo", footprint:"Recherche de vos traces", recheck:"Contrôle des pages", check:"Relevé des réponses"};
 const TONE = {draft:"",queued:"info",manual:"warn",sent:"info",reminded:"info",replied:"warn",needs_action:"warn",complaint_due:"bad",complaint_filed:"",done:"ok",refused:"bad",bounced:"bad"};
 const $ = (s, el=document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -109,7 +109,7 @@ async function refresh(light){
   }
   renderChrome();
   // On ne redessine que si quelque chose a changé, pour ne pas faire sauter un clic ou une saisie en cours.
-  const sig = JSON.stringify([S.requests, S.mail, S.companies, S.last_cycle, running(), S.mail_scan?.at, S.username_scan?.at, S.profile_ready, S.sent_today, S.shareable, S.footprint.findings.map(f => f.id + f.status + (f.request_status||"")).join(), S.footprint.last_scan?.at]);
+  const sig = JSON.stringify([S.requests, S.mail, S.companies, S.last_cycle, running(), S.mail_scan?.at, S.username_scan?.at, S.profile_ready, S.sent_today, S.shareable, S.orphans.length, S.last_check, S.footprint.findings.map(f => f.id + f.status + (f.request_status||"")).join(), S.footprint.last_scan?.at]);
   const changed = sig !== lastSig; lastSig = sig;
   if (!light || (changed && ["home","requests","discover"].includes(tab))) render();
 }
@@ -122,6 +122,7 @@ function jobDone(n, j){
   if (n === "update") { toast(`Base à jour : ${r.count} entreprises.`); found = null; tab === "companies" && render(); }
   if (n === "cycle") toast("Suivi terminé.");
   if (n === "footprint") toast((r.new ? `${r.new} nouvelle(s) page(s) trouvée(s).` : "Aucune nouvelle page.") + (r.errors && r.errors.length ? ` ${r.errors.length} recherche(s) en échec : ${r.errors[0]}` : ""));
+  if (n === "check") toast(r.reply || r.orphans ? `${r.reply} réponse(s) à valider${r.orphans?`, ${r.orphans} message(s) à rattacher`:""}.` : "Aucune nouvelle réponse.");
   if (n === "recheck") toast(r.gone ? `${r.gone} page(s) ont disparu.` : `${r.checked} page(s) contrôlée(s) : aucune n'a disparu.`);
   if (n === "mailscan" || n === "userscan") { tab === "discover" && render(); }
 }
@@ -137,7 +138,7 @@ let lastTick = Date.now();
 
 function renderChrome(){
   setHtml($("#nav"), TABS.map(([k,l]) => {
-    const n = k==="requests" ? (S.stats.replied||0)+(S.stats.complaint_due||0)+(S.stats.needs_action||0)
+    const n = k==="requests" ? (S.stats.replied||0)+(S.stats.complaint_due||0)+(S.stats.needs_action||0)+S.orphans.length
             : k==="footprint" ? S.footprint.findings.filter(f => f.status==="new").length : 0;
     return `<button data-tab="${k}" class="${k===tab?"on":""}">${l}${n?` <span class="pill warn">${n}</span>`:""}</button>`;
   }).join(""));
@@ -211,28 +212,43 @@ function rRequests(){
   const ids = new Set(S.requests.map(r=>r.id)); sel.forEach(i => ids.has(i) || sel.delete(i));
   const drafts = S.requests.filter(r => r.status==="draft").length;
   const opts = Object.entries(S.status_labels).filter(([k]) => S.stats[k]).map(([k,l]) => `<option value="${k}" ${filter===k?"selected":""}>${l} (${S.stats[k]})</option>`).join("");
-  $("#main").innerHTML = `<div class="card">
+  const proc = S.requests.filter(r => r.status==="replied" && r.suggestion==="processing").length;
+  const sentOnes = S.requests.filter(r => r.sent_at && r.status!=="bounced").sort((a,b) => a.name.localeCompare(b.name));
+  const pick = o => { const g = o.guesses.map(id => sentOnes.find(r => r.id===id)).filter(Boolean); return `${g.length?"":`<option value="">Choisir la demande…</option>`}${g.map(r => `<option value="${r.id}">${esc(r.name)} (probable)</option>`).join("")}${sentOnes.filter(r => !g.includes(r)).map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join("")}`; };
+  $("#main").innerHTML = `${S.orphans.length ? `<div class="card"><h2>Réponses à rattacher (${S.orphans.length})</h2>
+    <p class="mute small">Ces messages ressemblent à des réponses à vos demandes, mais l'application n'a pas su dire à laquelle. Choisissez la demande, ou écartez le message. L'expéditeur sera reconnu tout seul la prochaine fois.</p>
+    ${S.orphans.map((o,i) => `<div style="border-top:1px solid var(--line);padding:12px 0"><b>${esc(o.from_name || o.from)}</b> <span class="mute small">${esc(o.from)} · ${fdate(o.date)}${o.junk?" · trouvé dans les indésirables":""}</span><div>${esc(o.subject)}</div>
+      ${o.excerpt?`<pre style="max-height:130px;margin:6px 0">${esc(o.excerpt)}</pre>`:""}
+      <div class="row"><select data-osel="${i}" style="width:auto;max-width:320px">${pick(o)}</select><button class="btn primary" data-oatt="${i}">Rattacher</button><button class="btn" data-odis="${i}">Ce n'est pas une réponse</button>${o.phrase?`<span class="small mute">${esc(o.phrase)}</span>`:""}</div></div>`).join("")}</div>` : ""}
+  <div class="card">
     <div class="row" style="margin-bottom:12px"><h2 class="grow">Demandes (${S.requests.length})</h2>
       <select id="flt" style="width:auto"><option value="">Tous les statuts</option>${opts}</select>
+      <button class="btn" id="chk" ${running()||!S.mail.imap_ready?"disabled":""} title="Relève tout de suite votre boîte de réception et vos indésirables">Relever les réponses maintenant</button>
       <button class="btn" id="delsel" ${sel.size?"":"disabled"}>Supprimer la sélection</button>
       <button class="btn" id="sendsel" ${sel.size?"":"disabled"}>Envoyer la sélection</button>
       <button class="btn primary" id="sendall" ${drafts&&!running()?"":"disabled"}>Envoyer les ${drafts} brouillon(s)</button></div>
-    <p class="mute small">Envoyées aujourd'hui : ${S.sent_today} / ${S.mail.daily_cap}. Cliquez sur une ligne pour lire le courrier et agir.</p>
+    <p class="mute small">Envoyées aujourd'hui : ${S.sent_today} / ${S.mail.daily_cap}. ${S.last_check ? `Réponses relevées le ${new Date(S.last_check).toLocaleString("fr-FR")}` : "Réponses pas encore relevées"} ; relevé automatique toutes les 30 minutes tant que l'application tourne. Cliquez sur une ligne pour lire la réponse et agir.</p>
+    ${proc ? `<div class="note info row"><span class="grow">${proc} réponse(s) se bornent à accuser réception et à annoncer un traitement. Les valider les remet en attente : l'échéance d'un mois ne change pas.</span><button class="btn" id="accproc">Valider ces ${proc} « en cours de traitement »</button></div>` : ""}
     ${list.length ? `<div class="scroll"><table><thead><tr><th><input type="checkbox" id="all"></th><th>Entreprise</th><th>Statut</th><th>Envoyée</th><th>Échéance</th><th>Dernier message reçu</th></tr></thead><tbody>
     ${list.map(r => `<tr class="click" data-id="${r.id}"><td><input type="checkbox" data-c="${r.id}" ${sel.has(r.id)?"checked":""}></td>
       <td><b>${esc(r.name)}</b>${r.recurring?` <span class="pill" title="Renouvelée automatiquement">↻</span>`:""}<div class="mute small">${esc(r.email || (r.webform ? "formulaire en ligne" : "courrier postal"))}</div>${r.error?`<div class="small" style="color:var(--bad)">${esc(r.error)}</div>`:""}</td>
       <td><span class="pill ${TONE[r.status]}">${esc(S.status_labels[r.status])}</span>${r.processing_at&&["sent","reminded"].includes(r.status)?`<div class="mute small" style="margin-top:3px">ils disent traiter la demande (${fdate(r.processing_at)})</div>`:""}</td>
       <td>${fdate(r.sent_at)}</td><td>${deadline(r)}</td>
-      <td class="small">${r.reply_at?`${fdate(r.reply_at)} — ${esc(r.reply_subject)}`:r.ack_at?`<span class="mute">accusé de réception le ${fdate(r.ack_at)}</span>`:""}</td></tr>`).join("")}
+      <td class="small">${r.status==="replied"&&r.suggestion?`<div style="margin-bottom:3px"><span class="pill info">Proposition : ${esc(S.suggestion_labels[r.suggestion])}</span> <button class="btn" data-accept="${r.id}" style="padding:2px 9px;font-size:13px">Valider</button></div>`:""}${r.reply_at?`${fdate(r.reply_at)} — ${esc(r.reply_subject)}`:r.ack_at?`<span class="mute">accusé de réception le ${fdate(r.ack_at)}</span>`:""}</td></tr>`).join("")}
     </tbody></table></div>` : `<p class="mute">Aucune demande pour l'instant. Choisissez des entreprises dans l'onglet Entreprises ou Détection.</p>`}
   </div>`;
   $("#flt").onchange = e => { filter=e.target.value; rRequests(); };
+  $("#chk").onclick = () => startJob("check", "/api/check", {});
+  if ($("#accproc")) $("#accproc").onclick = async () => { const r = await api("/api/requests/accept", {only:"processing"}); toast(`${r.count} demande(s) remise(s) en attente.`); refresh(); };
+  $("#main").querySelectorAll("[data-oatt]").forEach(b => b.onclick = async () => { const o = S.orphans[+b.dataset.oatt], id = +$(`[data-osel="${b.dataset.oatt}"]`).value; if (!id) return toast("Choisissez d'abord la demande concernée."); await api("/api/orphans/attach", {key:o.key, id}); await refresh(); openRequest(id); });
+  $("#main").querySelectorAll("[data-odis]").forEach(b => b.onclick = async () => { await api("/api/orphans/dismiss", {key:S.orphans[+b.dataset.odis].key}); refresh(); });
   const send = async ids => { if(!ids.length) return; if(!S.mail.test_mode && !confirm(`Envoyer ${ids.length} e-mail(s) depuis ${S.mail.email} ? Cette action est définitive.`)) return; sel.clear(); await startJob("send", "/api/requests/send", {ids}); };
   $("#sendall").onclick = () => send(S.requests.filter(r=>r.status==="draft").map(r=>r.id));
   $("#sendsel").onclick = () => send([...sel].filter(i => S.requests.find(r=>r.id===i)?.status==="draft"));
   $("#delsel").onclick = async () => { if(confirm(`Supprimer ${sel.size} demande(s) et leur historique ?`)){ await api("/api/requests/delete",{ids:[...sel]}); sel.clear(); refresh(); } };
   const all = $("#all"); if (all) all.onchange = () => { list.forEach(r => all.checked ? sel.add(r.id) : sel.delete(r.id)); rRequests(); };
   $("#main").querySelectorAll("tr.click").forEach(tr => tr.onclick = e => {
+    if (e.target.dataset.accept) { api("/api/requests/accept", {ids:[+e.target.dataset.accept]}).then(() => refresh()); return; }
     if (e.target.matches("input")) { const i=+e.target.dataset.c; e.target.checked?sel.add(i):sel.delete(i); $("#delsel").disabled=$("#sendsel").disabled=!sel.size; return; }
     openRequest(+tr.dataset.id);
   });
@@ -242,6 +258,7 @@ const ACTION = {done:"Vous avez indiqué : suppression confirmée", refused:"Vou
 async function openRequest(id){
   const r = await api("/api/request?id="+id), d = $("#dlg");
   const B = (a,l,c="") => `<button class="btn ${c}" data-a="${a}">${l}</button>`;
+  const OUT = [["done","Suppression confirmée"],["processing","En cours de traitement"],["needs_action","Ils demandent quelque chose"],["refused","Ils refusent"]];
   const outcome = B("done","Suppression confirmée","primary") + B("processing","En cours de traitement") + B("needs_action","Ils demandent quelque chose") + B("refused","Ils refusent");
   const acts = {
     draft: B("send","Envoyer","primary") + B("delete","Supprimer","danger"),
@@ -249,7 +266,7 @@ async function openRequest(id){
     manual: B("sent_manually","Je l'ai envoyée moi-même","primary") + B("delete","Supprimer","danger"),
     sent: outcome + B("complaint_due","Préparer la plainte CNIL"),
     reminded: outcome + B("complaint_due","Préparer la plainte CNIL"),
-    replied: outcome + B("waiting","Ce n'était pas une réponse"),
+    replied: OUT.slice().sort((a,b) => (b[0]===r.suggestion)-(a[0]===r.suggestion)).map(([a,l],i) => B(a, (a===r.suggestion?"Valider : ":"")+l, (r.suggestion ? a===r.suggestion : i===0) ? "primary" : "")).join("") + B("waiting","Ce n'était pas une réponse"),
     needs_action: B("waiting","J'ai répondu, j'attends","primary") + B("processing","En cours de traitement") + B("done","Suppression confirmée") + B("refused","Ils refusent"),
     complaint_due: B("complaint_filed","Plainte déposée","primary") + B("done","Finalement, suppression confirmée"),
     refused: B("complaint_filed","Plainte déposée","primary"),
@@ -258,7 +275,9 @@ async function openRequest(id){
   d.innerHTML = `<div class="row"><h2 class="grow">${esc(r.name)}</h2><span class="pill ${TONE[r.status]}">${esc(S.status_labels[r.status])}</span></div>
   <p class="mute small">${r.email ? "Destinataire : "+esc(r.email) : "Pas d'adresse e-mail connue."} ${r.webform?`· <a href="${safeUrl(r.webform)}" target="_blank" rel="noopener noreferrer">Formulaire de l'entreprise</a>`:""}</p>
   ${r.status==="manual"?`<div class="note info">${r.webform?"Aucune adresse e-mail connue pour cette entreprise : elle passe par un formulaire. Copiez le texte ci-dessous et collez-le dans son formulaire":"Aucune adresse e-mail ni formulaire connus pour cette entreprise. Envoyez le texte ci-dessous par courrier postal"}, puis indiquez-le ici pour que le délai d'un mois soit suivi.${r.address?`<br><br><b>Adresse postale :</b><div style="white-space:pre-line">${esc(r.address)}</div>`:""}</div>`:""}
-  ${r.status==="replied"?`<div class="note warn">Message de <b>${esc(r.reply_from)}</b> le ${fdate(r.reply_at)} : « ${esc(r.reply_subject)} ». Lisez-le dans votre boîte mail, puis indiquez le résultat.</div>`:""}
+  ${r.reply_at ? `<div class="note ${r.status==="replied"?"warn":"info"}"><b>${r.status==="replied"?"Réponse à valider":"Dernière réponse reçue"}</b> : ${esc(r.reply_from)}, le ${fdate(r.reply_at)}, « ${esc(r.reply_subject)} »${r.reply_how?`<br><span class="small">${esc(r.reply_how)}</span>`:""}</div>
+  ${r.reply_excerpt?`<pre>${esc(r.reply_excerpt)}</pre>`:""}
+  ${r.status==="replied"?`<p class="small mute">${r.suggestion?`Proposition de l'application : <b>${esc(S.suggestion_labels[r.suggestion])}</b>. Elle s'appuie sur des tournures repérées dans le texte : vérifiez avec l'extrait ci-dessus, ou dans votre boîte mail en cas de doute.`:(r.reply_excerpt?"L'application n'a pas su classer cette réponse : lisez l'extrait ci-dessus, puis indiquez le résultat.":"Lisez ce message dans votre boîte mail, puis indiquez le résultat.")}</p>`:""}` : ""}
   ${r.status==="bounced"?`<div class="note bad">L'adresse ${esc(r.email)} ne fonctionne pas. Cherchez l'adresse du délégué à la protection des données sur le site de l'entreprise, puis ajoutez-la dans Entreprises → Ajouter une entreprise.</div>`:""}
   ${r.complaint?`<h3>Plainte CNIL</h3><pre id="cp">${esc(r.complaint)}</pre><div class="row" style="margin-bottom:14px"><button class="btn" data-copy="cp">Copier le texte</button><a href="https://www.cnil.fr/fr/plaintes" target="_blank" rel="noopener noreferrer">Ouvrir le formulaire de plainte de la CNIL</a></div>`:""}
   <h3>${esc(r.subject)}</h3><pre id="bd">${esc(r.body)}</pre>
@@ -595,10 +614,10 @@ function rGuide(){
       <ul><li>Les envois sont limités à 40 par jour, avec une pause entre deux, pour que votre adresse ne soit pas prise pour du spam. Le reste part au suivi suivant.</li>
       <li>Les entreprises sans e-mail apparaissent « À envoyer vous-même » : copiez le texte dans leur formulaire (ou par courrier), puis cliquez sur « Je l'ai envoyée moi-même » pour que le délai soit suivi.</li></ul>`],
     ["reponses", "8. Suivre les réponses", `
-      <p>L'entreprise a <b>un mois</b> pour répondre. L'application lit votre boîte de réception et met chaque demande à jour. Votre seule tâche : lire les réponses et dire ce qu'elles contiennent.</p>
+      <p>L'entreprise a <b>un mois</b> pour répondre. L'application relève votre boîte de réception et vos indésirables toutes les 30 minutes (ou tout de suite, avec « Relever les réponses maintenant »). Elle lit chaque réponse, en affiche un extrait et propose un classement. Votre seule tâche : valider la proposition, ou la corriger.</p>
       <div class="scroll"><table><thead><tr><th>Statut</th><th>Ce que ça veut dire</th><th>Ce que vous faites</th></tr></thead><tbody>
       <tr><td><span class="pill info">Envoyée, en attente</span></td><td>Le délai d'un mois court. Un accusé de réception automatique ne l'arrête pas.</td><td>Rien.</td></tr>
-      <tr><td><span class="pill warn">Réponse reçue, à lire</span></td><td>Un message de l'entreprise est arrivé.</td><td>Lisez-le dans votre boîte mail, puis cliquez sur « Suppression confirmée », « Ils demandent quelque chose » ou « Ils refusent ». S'ils disent seulement avoir bien reçu la demande et la traiter : « En cours de traitement » ; la demande repasse en attente et la relance partira quand même au bout d'un mois. Si ce n'était qu'une publicité : « Ce n'était pas une réponse ».</td></tr>
+      <tr><td><span class="pill warn">Réponse reçue, à valider</span></td><td>Un message de l'entreprise est arrivé. L'application en montre un extrait et propose un classement.</td><td>Cliquez sur « Valider » si la proposition est juste. Sinon, ouvrez la ligne, puis cliquez sur « Suppression confirmée », « Ils demandent quelque chose » ou « Ils refusent ». S'ils disent seulement avoir bien reçu la demande et la traiter : « En cours de traitement » ; la demande repasse en attente et la relance partira quand même au bout d'un mois. Si ce n'était qu'une publicité : « Ce n'était pas une réponse ».</td></tr>
       <tr><td><span class="pill warn">Ils demandent quelque chose</span></td><td>Souvent une confirmation depuis l'adresse concernée, parfois une pièce d'identité.</td><td>Répondez-leur depuis votre messagerie, puis « J'ai répondu, j'attends ». Une pièce d'identité ne peut être exigée qu'en cas de doute sérieux sur votre identité.</td></tr>
       <tr><td><span class="pill info">Relancée, en attente</span></td><td>Pas de réponse après un mois : une relance est partie toute seule. Ils ont 15 jours.</td><td>Rien.</td></tr>
       <tr><td><span class="pill bad">Plainte CNIL à déposer</span></td><td>Toujours rien après la relance.</td><td>Voir l'étape 9.</td></tr>
@@ -624,6 +643,7 @@ function rGuide(){
       <li><b>La liste guidée</b> en bas de l'onglet couvre les annuaires et registres français, et les outils officiels de Google.</li></ul>
       <p>Les réseaux sociaux ne laissent pas chercher une personne par son nom de façon automatique : passez par les recherches préparées, et par les paramètres de vos propres comptes.</p>`],
     ["faq", "Questions fréquentes", `
+      <p><b>L'application lit-elle mes e-mails ?</b> Elle lit l'expéditeur, l'objet et la date des messages reçus depuis votre première demande, pour repérer les réponses. Elle ne lit le texte que des messages qui répondent à vos demandes, afin d'en proposer un classement. Rien ne quitte ${S.app.server?"votre serveur":"cet ordinateur"}, et aucun message n'est marqué comme lu.</p>
       <p><b>Où sont mes données ?</b> Uniquement sur ${S.app.server?"votre serveur":"cet ordinateur"}, dans <code>${esc(S.app.data)}</code>. Rien n'est envoyé ailleurs qu'aux entreprises à qui vous écrivez et à votre propre messagerie.</p>
       <p><b>Est-ce légal ?</b> Oui : c'est l'exercice de votre droit à l'effacement (article 17 du RGPD) et d'opposition (article 21). C'est gratuit et l'entreprise doit répondre sous un mois.</p>
       <p><b>Une entreprise peut-elle refuser ?</b> Oui, dans certains cas : obligation légale de conserver (factures, banque), contrat en cours. Elle doit alors vous dire pourquoi.</p>

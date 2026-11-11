@@ -22,6 +22,7 @@ jobs:
           python tests/test_contact.py
           python tests/test_commu.py
           python tests/test_empreinte.py
+          python tests/test_reponses.py
         env:
           PYTHONUTF8: "1"
       - name: Fabriquer l'exe

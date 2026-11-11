@@ -37,3 +37,7 @@ jobs:
         run: python tests/test_empreinte.py
         env:
           PYTHONUTF8: "1"
+      - name: Relevé des réponses (boîte simulée)
+        run: python tests/test_reponses.py
+        env:
+          PYTHONUTF8: "1"

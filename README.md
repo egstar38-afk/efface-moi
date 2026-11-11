@@ -14,7 +14,8 @@ Elle tourne sur votre ordinateur, envoie depuis votre propre boîte mail, et ne 
 |---|---|
 | Rédiger la demande d'effacement, en français ou en anglais selon l'entreprise | Oui |
 | Envoyer par e-mail, avec une limite quotidienne et une pause entre deux envois | Oui |
-| Repérer les réponses, les accusés de réception et les adresses invalides | Oui (expéditeur et objet seulement) |
+| Repérer les réponses (boîte de réception et indésirables), toutes les 30 minutes ou à la demande | Oui |
+| Lire chaque réponse et proposer un classement : supprimé, en cours, demande de justificatif, refus | Oui, à valider par vous |
 | Relancer après un mois sans réponse | Oui |
 | Préparer le texte de la plainte CNIL 15 jours après la relance | Oui |
 | Redemander l'effacement aux courtiers tous les 6 mois | Oui |
@@ -24,7 +25,7 @@ Elle tourne sur votre ordinateur, envoie depuis votre propre boîte mail, et ne 
 | Chercher les pages du web qui affichent votre nom, e-mail, téléphone ou pseudo | Oui, avec un moteur (voir « Empreinte publique ») |
 | Demander au site la suppression d'une page précise, et suivre si elle disparaît | Oui |
 | Demander le déréférencement à Google et à Bing | Non, le texte du formulaire est prêt à copier |
-| Lire une réponse et dire si la suppression est confirmée | Non, c'est vous |
+| Valider le classement proposé pour chaque réponse | Non, c'est vous (un clic) |
 | Remplir un formulaire en ligne ou poster un courrier (entreprises sans e-mail) | Non, le texte est prêt à copier |
 | Déposer la plainte sur cnil.fr | Non, le texte est prêt à copier |
 
@@ -147,7 +148,8 @@ toute seule), ou fermez la proposition pour refuser.
 - La recherche de pseudo ne peut pas vérifier tous les sites.
 - La recherche automatique dépend de ce que les moteurs veulent bien montrer : une page peut exister sans être
   trouvée, et un homonyme peut être signalé à tort. C'est vous qui triez.
-- Efface-moi ne lit pas le contenu des réponses : c'est vous qui dites si la suppression est confirmée.
+- Le classement des réponses repose sur des tournures repérées dans le texte (français, anglais, allemand) :
+  c'est une proposition, que vous validez. Seul le contenu des réponses à vos demandes est lu, sur votre machine.
 
 ## Vos données
 
@@ -165,6 +167,7 @@ toute seule), ou fermez la proposition pour refuser.
     python tests/test_contact.py    # recherche d'adresse sur un faux site
     python tests/test_commu.py      # partage d'adresses entre utilisateurs
     python tests/test_empreinte.py  # empreinte publique, avec un faux moteur de recherche
+    python tests/test_reponses.py   # relevé des réponses, avec une boîte mail simulée
 
 Les tests n'envoient aucun e-mail et n'accèdent pas à Internet. `construire-exe.bat` fabrique
 `dist\EffaceMoi.exe` avec PyInstaller. `outils/icone.py` redessine l'icône (il lui faut Pillow). Pousser une étiquette `v1.2.3` fait fabriquer et publier l'exe par
@@ -174,6 +177,7 @@ GitHub Actions.
     core/letters.py     textes des courriers (effacement, relance, plainte)
     core/mailer.py      envoi SMTP, lecture des en-têtes IMAP
     core/engine.py      cycle de vie des demandes
+    core/replies.py     rattachement des réponses et proposition de classement
     core/discover.py    analyse de la boîte mail, recherche de pseudo
     core/contact.py     recherche d'adresse sur le site d'une entreprise
     core/footprint.py   empreinte publique : recherche, pages trouvées, suppression, déréférencement

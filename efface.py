@@ -43,6 +43,7 @@ def state():
         "requests": reqs, "stats": stats, "automation": engine.automation(), "jobs": jobs,
         "sent_today": engine.sent_today(), "last_cycle": store.get("last_cycle"),
         "last_check": store.get("last_check"), "mail_scan": store.get("mail_scan"),
+        "orphans": store.get("orphan_replies", []), "suggestion_labels": engine.SUGGESTION_LABEL,
         "username_scan": footprint.enrich_accounts(store.get("username_scan")),
         "footprint": footprint.state(),
         "custom": [companies.summary(c) for c in store.get("custom_companies", [])],
@@ -133,6 +134,11 @@ POST = {
     "/api/requests/status": lambda b: engine.set_status(int(b["id"]), str(b.get("action", ""))),
     "/api/requests/delete": lambda b: engine.delete([int(i) for i in b.get("ids", [])]),
     "/api/cycle": lambda b: job("cycle", engine.run_cycle),
+    "/api/check": lambda b: (need_imap(), job("check", engine.check_replies))[1],
+    "/api/requests/accept": lambda b: {"count": engine.accept([int(i) for i in b.get("ids", [])],
+                                                              str(b.get("only", "")) or None)},
+    "/api/orphans/attach": lambda b: engine.attach_orphan(str(b.get("key", "")), int(b["id"])),
+    "/api/orphans/dismiss": lambda b: engine.dismiss_orphan(str(b.get("key", ""))),
     "/api/scan/mail": lambda b: (need_imap(), job("mailscan", lambda p: discover.scan_mailbox(
         max(100, min(int(b.get("limit", 3000)), 20000)), p)))[1],
     "/api/scan/username": lambda b: job("userscan", lambda p: (footprint.ensure_jdm(), discover.scan_username(
@@ -241,6 +247,23 @@ def running_port():
         return None
 
 
+CHECK_MINUTES = 30
+
+
+def watch_replies():
+    """Tant que l'application tourne, relève les réponses toutes les 30 minutes : inutile d'attendre le suivi
+    du lendemain pour voir ce qui est arrivé dans la journée."""
+    time.sleep(120)
+    while True:
+        try:
+            busy = any(j.get("running") for j in engine.JOBS.values())
+            if not busy and mailer.ready(for_imap=True) and engine.has_waiting():
+                engine.start_job("check", engine.check_replies)
+        except Exception:  # noqa: BLE001 - un relevé manqué n'est pas grave : le suivant arrive
+            pass
+        time.sleep(CHECK_MINUTES * 60)
+
+
 def serve(port, open_browser):
     global SERVER
     existing = running_port()
@@ -267,6 +290,7 @@ def serve(port, open_browser):
           flush=True)
     if open_browser:
         threading.Timer(0.5, webbrowser.open, [url]).start()
+    threading.Thread(target=watch_replies, daemon=True).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

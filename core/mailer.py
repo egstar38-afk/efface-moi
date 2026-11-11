@@ -1,6 +1,7 @@
 """Envoi (SMTP) et lecture des en-têtes (IMAP) avec la boîte mail de l'utilisateur."""
 import email
 import email.utils
+import html as html_lib
 import imaplib
 import re
 import smtplib
@@ -177,24 +178,119 @@ def parse_headers(raw):
             "auto": auto, "unsubscribe": bool(m.get("List-Unsubscribe"))}
 
 
-def fetch_headers(since=None, limit=None, progress=lambda *a: None):
-    """En-têtes des messages de la boîte de réception (jamais le contenu), en lecture seule."""
+def _special_folder(m, flag):
+    """Nom du dossier qui joue ce rôle (\\Junk…), quelle que soit la langue de la boîte."""
+    try:
+        typ, data = m.list()
+    except Exception:  # noqa: BLE001
+        return None
+    for line in data or []:
+        s = line.decode("utf-8", "replace") if isinstance(line, bytes) else str(line)
+        if flag.lower() in s.lower():
+            found = re.search(r'"((?:[^"\\]|\\.)*)"\s*$', s) or re.search(r"(\S+)\s*$", s)
+            if found:
+                return found.group(1)
+    return None
+
+
+def _select(m, folder):
+    typ, _ = m.select('"%s"' % folder.replace('"', '\\"'), readonly=True)
+    return typ == "OK"
+
+
+def fetch_headers(since=None, limit=None, progress=lambda *a: None, junk=False):
+    """En-têtes des messages reçus, en lecture seule. junk=True regarde aussi le dossier des indésirables,
+    où atterrissent certaines réponses d'expéditeurs inconnus. Chaque en-tête porte son dossier et son numéro."""
     s = settings()
     m = _imap(s)
     try:
-        m.select("INBOX", readonly=True)
+        folders = ["INBOX"]
+        if junk:
+            spam = _special_folder(m, "\\Junk")
+            if spam:
+                folders.append(spam)
         crit = ["SINCE", "%d-%s-%d" % (since.day, MONTHS[since.month - 1], since.year)] if since else ["ALL"]
-        typ, data = m.uid("search", None, *crit)
-        uids = data[0].split() if typ == "OK" and data and data[0] else []
-        if limit:
-            uids = uids[-limit:]
         out = []
-        for i in range(0, len(uids), 200):
-            progress(i, len(uids), "Lecture des en-têtes…")
-            typ, parts = m.uid("fetch", b",".join(uids[i:i + 200]), "(BODY.PEEK[HEADER.FIELDS (%s)])" % HEADER_FIELDS)
+        for folder in folders:
+            try:
+                if not _select(m, folder):
+                    continue
+                typ, data = m.uid("search", None, *crit)
+            except imaplib.IMAP4.error:
+                continue
+            uids = data[0].split() if typ == "OK" and data and data[0] else []
+            if limit:
+                uids = uids[-limit:]
+            for i in range(0, len(uids), 200):
+                progress(i, len(uids), "Lecture des en-têtes…")
+                typ, parts = m.uid("fetch", b",".join(uids[i:i + 200]),
+                                   "(BODY.PEEK[HEADER.FIELDS (%s)])" % HEADER_FIELDS)
+                for p in parts or []:
+                    if isinstance(p, tuple) and len(p) > 1 and p[1]:
+                        uid = re.search(rb"UID (\d+)", p[0] or b"")
+                        h = parse_headers(p[1])
+                        h.update(folder=folder, uid=uid.group(1).decode() if uid else "")
+                        out.append(h)
+        return out
+    finally:
+        try:
+            m.logout()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def message_text(raw):
+    """Texte lisible d'un message (éventuellement tronqué) : la partie texte, sinon le HTML débarrassé de ses balises."""
+    try:
+        msg = email.message_from_bytes(raw)
+    except Exception:  # noqa: BLE001
+        return ""
+    plain, rich = "", ""
+    for part in msg.walk():
+        if part.is_multipart() or "attachment" in (part.get("Content-Disposition") or "").lower():
+            continue
+        kind = part.get_content_type()
+        if kind not in ("text/plain", "text/html") or (plain if kind == "text/plain" else rich):
+            continue
+        try:
+            data = part.get_payload(decode=True) or b""
+            try:
+                text = data.decode(part.get_content_charset() or "utf-8", "replace")
+            except LookupError:
+                text = data.decode("utf-8", "replace")
+        except Exception:  # noqa: BLE001 - partie coupée au milieu ou mal encodée
+            continue
+        if kind == "text/plain":
+            plain = text
+        else:
+            text = re.sub(r"(?is)<(script|style|head)\b.*?</\1>", " ", text)
+            text = re.sub(r"(?i)<br\s*/?>|</p>|</div>|</tr>|</li>|</h[1-6]>", "\n", text)
+            rich = html_lib.unescape(re.sub(r"<[^>]+>", " ", text))
+    return (plain if plain.strip() else rich)[:15000]
+
+
+def fetch_texts(items, progress=lambda *a: None, limit_bytes=80000):
+    """Texte de messages précis, désignés par (dossier, numéro). Lecture seule : ils ne sont pas marqués comme lus.
+    Sert uniquement pour les réponses à vos demandes."""
+    out = {}
+    if not items:
+        return out
+    m = _imap(settings())
+    try:
+        current = None
+        for n, (folder, uid) in enumerate(items):
+            progress(n, len(items), "Lecture des réponses…")
+            try:
+                if folder != current:
+                    if not _select(m, folder):
+                        continue
+                    current = folder
+                typ, parts = m.uid("fetch", str(uid), "(BODY.PEEK[]<0.%d>)" % limit_bytes)
+            except imaplib.IMAP4.error:
+                continue
             for p in parts or []:
                 if isinstance(p, tuple) and len(p) > 1 and p[1]:
-                    out.append(parse_headers(p[1]))
+                    out[(folder, str(uid))] = message_text(p[1])
         return out
     finally:
         try:

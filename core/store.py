@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 FROZEN = bool(getattr(sys, "frozen", False))      # vrai dans la version .exe
 ROOT = Path(__file__).resolve().parent.parent     # dossier du code (dans l'exe : dossier interne en lecture seule)
 
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS requests (
     subject TEXT, body TEXT, message_id TEXT, reminder_message_id TEXT, complaint TEXT,
     created_at TEXT, sent_at TEXT, due_at TEXT, reminded_at TEXT, due2_at TEXT, closed_at TEXT,
     reply_at TEXT, reply_from TEXT, reply_subject TEXT, ack_at TEXT, error TEXT, processing_at TEXT,
-    urls TEXT
+    urls TEXT, suggestion TEXT, reply_excerpt TEXT, reply_how TEXT
 );
 CREATE TABLE IF NOT EXISTS findings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +65,7 @@ def _migrate(con):
     if _migrated:
         return
     have = {row[1] for row in con.execute("PRAGMA table_info(requests)")}
-    for column in ("processing_at", "urls"):
+    for column in ("processing_at", "urls", "suggestion", "reply_excerpt", "reply_how"):
         if column not in have:
             con.execute("ALTER TABLE requests ADD COLUMN %s TEXT" % column)
     _migrated = True

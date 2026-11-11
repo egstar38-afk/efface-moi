@@ -4,7 +4,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 
-from . import companies, letters, mailer, store
+from . import companies, letters, mailer, replies, store
 
 DEADLINE_DAYS = 31      # un mois (art. 12.3 RGPD), avec un jour de marge
 REMINDER_DAYS = 15
@@ -14,7 +14,7 @@ STATUS = {
     "manual": "À envoyer vous-même",
     "sent": "Envoyée, en attente",
     "reminded": "Relancée, en attente",
-    "replied": "Réponse reçue, à lire",
+    "replied": "Réponse reçue, à valider",
     "needs_action": "Ils demandent quelque chose",
     "complaint_due": "Plainte CNIL à déposer",
     "complaint_filed": "Plainte déposée",
@@ -130,6 +130,20 @@ def queue(ids):
 
 # ---------- envoi ----------
 
+def with_reference(r):
+    """Ajoute à l'objet et au courrier une référence propre à la demande (EM-12). Beaucoup de services
+    répondent depuis un autre domaine, sans lien technique avec le message d'origine : la référence, qu'ils
+    citent presque toujours, permet alors de rattacher leur réponse."""
+    ref = "EM-%d" % r["id"]
+    subject, body = r["subject"] or "", r["body"] or ""
+    if ref not in subject:
+        subject = "%s [%s]" % (subject, ref)
+    if ref not in body:
+        label = "Reference of my request" if r.get("lang") == "en" else "Référence de ma demande"
+        body = "%s\n\n%s : %s\n" % (body.rstrip(), label, ref)
+    return subject, body
+
+
 def sent_today():
     start = store.now().replace(hour=0, minute=0, second=0).isoformat(timespec="seconds")
     return store.one("SELECT COUNT(*) AS n FROM events WHERE type IN ('sent','reminder_sent') AND at>=?", (start,))["n"]
@@ -150,8 +164,9 @@ def send_queued(progress=lambda *a: None):
             if not s["test_mode"] and _room() <= 0:
                 out["left"] = len(todo) - i
                 break
+            subject, body = with_reference(r)
             try:
-                mid, real = mailer.send(r["email"], r["subject"], r["body"])
+                mid, real = mailer.send(r["email"], subject, body)
             except Exception as e:  # noqa: BLE001
                 err = "%s : %s" % (type(e).__name__, mailer._clean(e))
                 store.update_request(r["id"], status="draft", error=err)
@@ -161,6 +176,7 @@ def send_queued(progress=lambda *a: None):
             if real:
                 t = store.now()
                 store.update_request(r["id"], status="sent", sent_at=store.iso(t), message_id=mid, error=None,
+                                     subject=subject, body=body,
                                      due_at=store.iso(t + timedelta(days=DEADLINE_DAYS)))
                 store.event(r["id"], "sent", r["email"])
                 out["sent"] += 1
@@ -176,58 +192,176 @@ def send_queued(progress=lambda *a: None):
 
 # ---------- réponses ----------
 
-def match_replies(open_requests, headers):
-    """Fonction pure : associe des en-têtes de messages reçus aux demandes en attente.
-    Renvoie une liste (id, type, en-tête) avec type = 'reply', 'ack' ou 'bounce'."""
+WAITING = ("sent", "reminded", "needs_action", "replied")      # demandes pour lesquelles un message peut encore arriver
+MAX_TEXTS = 80                                                  # messages lus en entier par relevé
+SUGGESTION_LABEL = {"done": "Suppression confirmée", "needs_action": "Ils demandent quelque chose",
+                    "refused": "Ils refusent", "processing": "En cours de traitement"}
+
+
+def match_replies(open_requests, headers, aliases=None):
+    """Fonction pure, d'après les seuls en-têtes : rattache chaque message à la demande qu'il concerne.
+    Renvoie une liste (id, type, en-tête) avec type = 'reply', 'ack' (réponse automatique) ou 'bounce'."""
     out = []
     for h in sorted(headers, key=lambda x: x["date"]):
-        local, _, dom = h["from"].partition("@")
-        for r in open_requests:
-            mark = max(r.get("sent_at") or "", r.get("reply_at") or "", r.get("ack_at") or "")
-            if not h["date"] or h["date"] <= mark:
-                continue
-            ids = {r.get("message_id"), r.get("reminder_message_id")} - {None, ""}
-            by_ref = bool(ids & set(h["refs"]))
-            rdom = companies.base_domain(r.get("email"))
-            by_domain = (bool(rdom) and rdom not in companies.FREEMAIL and companies.base_domain(dom) == rdom
-                         and not h["unsubscribe"])
-            if by_ref and local.lower() in ("mailer-daemon", "postmaster"):
-                out.append((r["id"], "bounce", h))
-            elif by_ref or by_domain:
-                out.append((r["id"], "ack" if h["auto"] else "reply", h))
+        r, how = replies.best_match(open_requests, h, None, aliases)
+        if r:
+            out.append((r["id"], _kind(h, how), dict(h, how=how)))
     return out
 
 
-def apply_matches(matches):
+def _kind(h, how):
+    if how.startswith("réponse directe") and h["from"].partition("@")[0].lower() in ("mailer-daemon", "postmaster"):
+        return "bounce"
+    return "ack" if h.get("auto") else "reply"
+
+
+def _key(h):
+    return (h.get("folder") or "INBOX", str(h.get("uid") or ""))
+
+
+def apply_matches(matches, texts=None):
+    """Enregistre les rattachements. Avec le texte des messages, ajoute l'extrait et une proposition de
+    classement, que l'utilisateur validera. Un message automatique qui se borne à accuser réception est
+    noté sans rien demander ; s'il réclame une action ou confirme la suppression, il est signalé."""
     counts = {"reply": 0, "ack": 0, "bounce": 0}
     for rid, kind, h in matches:
-        r = store.one("SELECT status FROM requests WHERE id=?", (rid,))
-        if not r or r["status"] not in ("sent", "reminded"):
+        r = store.one("SELECT status, suggestion FROM requests WHERE id=?", (rid,))
+        if not r or r["status"] not in WAITING:
             continue
+        text = (texts or {}).get(_key(h))
+        excerpt = replies.clean(text) if text else ""
+        category, action, phrase = replies.classify(excerpt, h["subject"]) if text is not None else ("", "", "")
         detail = "%s — %s" % (h["from"], h["subject"])
         if kind == "bounce":
             store.update_request(rid, status="bounced", closed_at=store.iso(), reply_at=h["date"],
-                                 reply_from=h["from"], reply_subject=h["subject"])
-        elif kind == "ack":
+                                 reply_from=h["from"], reply_subject=h["subject"], suggestion=None)
+        elif kind == "ack" and (category == "processing" or text is None):
+            # Message automatique qui accuse seulement réception (ou dont le texte n'a pas été lu) : noté, sans plus.
             store.update_request(rid, ack_at=h["date"])
+        elif r["status"] == "replied" and r["suggestion"] not in (None, "", "processing") and action in ("", "processing"):
+            # Une réponse plus parlante attend déjà la validation : ce message-ci n'y change rien.
+            store.update_request(rid, ack_at=h["date"])
+            kind = "ack"
         else:
+            how = h.get("how") or ""
+            if h.get("folder") and h["folder"] != "INBOX":
+                how += " ; trouvée dans les indésirables"
             store.update_request(rid, status="replied", reply_at=h["date"], reply_from=h["from"],
-                                 reply_subject=h["subject"])
+                                 reply_subject=h["subject"], reply_excerpt=excerpt, suggestion=action or None,
+                                 reply_how="%s%s" % (phrase + ". " if phrase else "", ("Rattachée car : " + how) if how else ""))
+            kind = "reply"
         store.event(rid, kind, detail)
         counts[kind] += 1
     return counts
 
 
+def has_waiting():
+    return bool(store.one("SELECT id FROM requests WHERE status IN (%s) AND sent_at IS NOT NULL LIMIT 1"
+                          % ",".join("?" * len(WAITING)), WAITING))
+
+
 def check_replies(progress=lambda *a: None):
-    waiting = store.rows("SELECT * FROM requests WHERE status IN ('sent','reminded')")
+    """Relève la boîte : rattache les réponses, lit leur texte, propose un classement, met de côté celles
+    qui ressemblent à une réponse sans pouvoir être rattachées."""
+    zero = {"reply": 0, "ack": 0, "bounce": 0, "checked": 0, "orphans": 0}
+    everyone = store.rows("SELECT * FROM requests WHERE sent_at IS NOT NULL")
+    if not store.get("replies_reread"):
+        # Une seule fois : les messages repérés par les versions précédentes, qui ne lisaient que les en-têtes,
+        # sont relus pour recevoir un extrait et une proposition. Les demandes déjà classées par l'utilisateur
+        # ne sont pas touchées.
+        for r in everyone:
+            if r["reply_excerpt"] is None and r["status"] in ("sent", "reminded") and r["ack_at"] and not r["processing_at"]:
+                store.update_request(r["id"], ack_at=None)
+            elif r["reply_excerpt"] is None and r["status"] == "replied":
+                store.update_request(r["id"], ack_at=None, reply_at=None)
+        store.set("replies_reread", store.iso())
+        everyone = store.rows("SELECT * FROM requests WHERE sent_at IS NOT NULL")
+    waiting = [r for r in everyone if r["status"] in WAITING]
     if not waiting:
-        return {"reply": 0, "ack": 0, "bounce": 0, "checked": 0}
-    since = datetime.fromisoformat(min(r["sent_at"] for r in waiting)) - timedelta(days=1)
-    headers = mailer.fetch_headers(since=since, progress=progress)
-    counts = apply_matches(match_replies(waiting, headers))
-    counts["checked"] = len(headers)
+        return zero
+    first = min(r["sent_at"] for r in waiting)
+    headers = mailer.fetch_headers(since=datetime.fromisoformat(first) - timedelta(days=1), progress=progress, junk=True)
+    aliases = store.get("reply_aliases", {})
+    own = mailer.settings()["email"].lower()
+    set_aside = store.get("seen_candidates", [])
+    seen = set(set_aside)
+    matched, candidates = [], []
+    for h in sorted(headers, key=lambda x: x["date"]):
+        if h["from"] == own or not h["date"]:
+            continue
+        r, how = replies.best_match(waiting, h, None, aliases)
+        if r:
+            matched.append((r["id"], _kind(h, how), dict(h, how=how)))
+        elif h["date"] > first and (h["message_id"] or "%s/%s" % _key(h)) not in seen and replies.is_candidate(h):
+            # Déjà traité (réponse plus ancienne que la dernière relevée, ou demande déjà classée) : on passe.
+            if not any(replies.header_evidence(x, h, aliases)[0] >= 3 for x in everyone):
+                candidates.append(h)
+    want = [_key(h) for _, kind, h in matched if kind != "bounce"] + [_key(h) for h in candidates]
+    texts = mailer.fetch_texts([k for k in dict.fromkeys(want) if k[1]][:MAX_TEXTS], progress) if want else {}
+    orphans = store.get("orphan_replies", [])
+    for h in candidates:
+        text = texts.get(_key(h))
+        if text is None:
+            continue        # texte pas encore lu (trop de messages d'un coup, ou lecture en échec) : au prochain relevé
+        key = h["message_id"] or "%s/%s" % _key(h)
+        set_aside.append(key)       # examiné une fois pour toutes : il ne sera pas relu
+        r, how = replies.best_match(waiting, h, text, aliases)
+        if r:
+            matched.append((r["id"], "ack" if h.get("auto") else "reply", dict(h, how=how)))
+            continue
+        if text and any(replies.body_evidence(x, text)[0] >= 5 for x in everyone):
+            continue        # concerne une demande déjà classée, ou un message déjà relevé
+        excerpt = replies.clean(text) if text else ""
+        category, action, phrase = replies.classify(excerpt, h["subject"]) if text is not None else ("", "", "")
+        if h.get("auto") and category == "processing" and not replies.OUR_SUBJECT.search(h["subject"]):
+            continue        # accusé de réception automatique impossible à rattacher : sans intérêt
+        orphans.append({"key": key, "from": h["from"], "from_name": h["from_name"], "subject": h["subject"],
+                        "date": h["date"], "excerpt": excerpt[:700], "action": action, "phrase": phrase,
+                        "junk": bool(h.get("folder") and h["folder"] != "INBOX"),
+                        "guesses": replies.guesses(waiting, h, text, aliases)})
+    counts = apply_matches(sorted(matched, key=lambda x: x[2]["date"]), texts)
+    store.set("orphan_replies", orphans[-100:])
+    store.set("seen_candidates", set_aside[-2000:])
+    counts.update(checked=len(headers), orphans=len(orphans))
     store.set("last_check", store.iso())
     return counts
+
+
+def attach_orphan(key, rid):
+    """L'utilisateur indique à quelle demande se rapporte un message mis de côté. L'expéditeur est retenu :
+    ses prochains messages seront rattachés seuls."""
+    orphans = store.get("orphan_replies", [])
+    o = next((x for x in orphans if x["key"] == key), None)
+    r = store.one("SELECT * FROM requests WHERE id=?", (rid,))
+    if not o or not r:
+        raise ValueError("Message ou demande introuvable.")
+    domain = companies.base_domain(o["from"])
+    if domain and domain not in companies.FREEMAIL:
+        aliases = store.get("reply_aliases", {})
+        aliases[domain] = r["slug"]
+        store.set("reply_aliases", aliases)
+    store.update_request(rid, status="replied", reply_at=o["date"], reply_from=o["from"], reply_subject=o["subject"],
+                         reply_excerpt=o["excerpt"], suggestion=o["action"] or None, closed_at=None,
+                         reply_how="%sRattachée par vous." % (o["phrase"] + ". " if o["phrase"] else ""))
+    store.event(rid, "reply", "%s — %s" % (o["from"], o["subject"]))
+    store.set("orphan_replies", [x for x in orphans if x["key"] != key])
+
+
+def dismiss_orphan(key):
+    store.set("orphan_replies", [x for x in store.get("orphan_replies", []) if x["key"] != key])
+
+
+def accept(ids=None, only=None):
+    """Valide la proposition de l'application pour ces demandes (toutes celles en attente de validation si ids
+    est vide), éventuellement limitée à un type de proposition. Renvoie le nombre de demandes classées."""
+    rows = store.rows("SELECT id, suggestion FROM requests WHERE status='replied' AND suggestion IS NOT NULL")
+    n = 0
+    for r in rows:
+        if (ids and r["id"] not in ids) or (only and r["suggestion"] != only) or r["suggestion"] not in SUGGESTION_LABEL:
+            continue
+        set_status(r["id"], r["suggestion"])
+        n += 1
+    return n
 
 
 # ---------- relances, plaintes, renouvellement ----------
@@ -247,6 +381,8 @@ def send_reminders():
             if _room() <= 0:
                 break
             subject, body = letters.reminder(profile(), r)
+            if "EM-%d" % r["id"] not in subject:
+                subject += " [EM-%d]" % r["id"]
             try:
                 mid, _ = mailer.send(r["email"], subject, body, in_reply_to=r["message_id"])
             except Exception as e:  # noqa: BLE001
@@ -323,6 +459,7 @@ def set_status(rid, action):
     if not r:
         raise ValueError("Demande introuvable.")
     t = store.iso()
+    store.update_request(rid, suggestion=None)      # l'utilisateur a tranché : la proposition n'a plus lieu d'être
     if action in ("done", "refused", "complaint_filed"):
         fields = {"status": action, "closed_at": t}
         if action == "refused" and r["sent_at"]:
@@ -398,7 +535,7 @@ def mark_shared(slug):
 
 def list_requests():
     cols = ("id, slug, name, email, webform, lang, status, recurring, created_at, sent_at, due_at, reminded_at, "
-            "due2_at, closed_at, reply_at, reply_from, reply_subject, ack_at, error, processing_at")
+            "due2_at, closed_at, reply_at, reply_from, reply_subject, ack_at, error, processing_at, suggestion, reply_how")
     return store.rows("SELECT %s FROM requests ORDER BY id DESC" % cols)
 
 
