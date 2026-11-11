@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 FROZEN = bool(getattr(sys, "frozen", False))      # vrai dans la version .exe
 ROOT = Path(__file__).resolve().parent.parent     # dossier du code (dans l'exe : dossier interne en lecture seule)
 
